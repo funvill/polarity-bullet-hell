@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polarity - Bullet Hell</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background-color: #000;
+            overflow: hidden;
+        }
+
+        #game-canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            color: white;
+            font-size: 18px;
+        }
+
+        #hud-top {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        #hud-bottom {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+        }
+
+        #controls-help {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid #666;
+            padding: 10px;
+            font-size: 12px;
+            color: #aaa;
+        }
+
+        #controls-help h4 {
+            margin: 0 0 5px 0;
+            color: #fff;
+            font-size: 14px;
+        }
+
+        #controls-help div {
+            margin: 3px 0;
+        }
+
+        #controls-help kbd {
+            background: #333;
+            padding: 2px 5px;
+            border-radius: 3px;
+            border: 1px solid #555;
+            font-family: monospace;
+            color: #fff;
+        }
+
+        .hud-section {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px 15px;
+            border: 2px solid white;
+        }
+
+        #energy-bar-container {
+            width: 200px;
+            height: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid white;
+            margin-top: 5px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #energy-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #00ffff, #0099ff);
+            transition: width 0.2s;
+        }
+
+        #energy-bar-fill.full {
+            animation: pulse-energy 0.5s infinite;
+        }
+
+        @keyframes pulse-energy {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        #chain-display {
+            font-size: 32px;
+            font-weight: bold;
+            color: #ffff00;
+            text-shadow: 0 0 10px #ffff00;
+            animation: pulse-chain 1s infinite;
+        }
+
+        @keyframes pulse-chain {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        #polarity {
+            font-weight: bold;
+            font-size: 24px;
+        }
+
+        #stats {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 12px;
+            color: #0f0;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 5px;
+            font-family: monospace;
+        }
+
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            border: 4px solid white;
+            padding: 40px;
+            text-align: center;
+            display: none;
+        }
+
+        #game-over h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            color: #ff0000;
+        }
+
+        #game-over p {
+            font-size: 20px;
+            margin: 10px 0;
+        }
+
+        #game-over .instruction {
+            margin-top: 30px;
+            font-size: 16px;
+            color: #888;
+        }
+
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 1000;
+        }
+
+        #start-screen.hidden {
+            display: none;
+        }
+
+        #start-screen h1 {
+            font-size: 64px;
+            margin-bottom: 20px;
+            color: #00ffff;
+            text-shadow: 0 0 20px #00ffff;
+        }
+
+        #start-screen h2 {
+            font-size: 32px;
+            margin-bottom: 40px;
+            color: #ff8800;
+        }
+
+        #start-screen .rules {
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid #666;
+            padding: 30px;
+            max-width: 600px;
+            text-align: left;
+            line-height: 1.8;
+        }
+
+        #start-screen .rules ul {
+            list-style: disc;
+            padding-left: 25px;
+            margin: 20px 0;
+        }
+
+        #start-screen .rules li {
+            margin: 10px 0;
+            font-size: 18px;
+            line-height: 1.6;
+        }
+
+        #start-screen .rules kbd {
+            background: #333;
+            padding: 4px 8px;
+            border-radius: 3px;
+            border: 1px solid #555;
+            font-family: monospace;
+            color: #00ffff;
+            font-weight: bold;
+        }
+
+        #start-screen .start-instruction {
+            margin-top: 40px;
+            font-size: 24px;
+            color: #ffff00;
+            animation: blink 1.5s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+    </style>
+</head>
+<body>
+    <div id="start-screen">
+        <h1>POLARITY</h1>
+        <h2>It's all about your polarity</h2>
+        <div class="rules">
+            <ul>
+                <li><kbd>Right Mouse Button</kbd> to change polarity (Black/White)</li>
+                <li>Absorb bullets of the same polarity to increase energy</li>
+                <li>Your bullets only harm ships of different polarity (black bullets hurt white ships)</li>
+                <li>When your energy is full, use the <kbd>Space Bar</kbd> to trigger bomb</li>
+                <li><kbd>Left Mouse Button</kbd> to fire main weapon</li>
+                <li><strong>High score wins</strong></li>
+            </ul>
+        </div>
+        <div class="start-instruction">Press SPACE to start</div>
+    </div>
+
+    <canvas id="game-canvas"></canvas>
+    <canvas id="game-canvas"></canvas>
+    
+    <div id="hud">
+        <div id="hud-top">
+            <div class="hud-section">
+                <div>SCORE: <span id="score">0</span></div>
+                <div id="chain-display">CHAIN: x<span id="chain">0</span></div>
+            </div>
+        </div>
+
+        <div id="controls-help">
+            <h4>CONTROLS</h4>
+            <div><kbd>WASD</kbd> / <kbd>Arrows</kbd> Move</div>
+            <div><kbd>Mouse</kbd> Aim</div>
+            <div><kbd>Left Click</kbd> Fire</div>
+            <div><kbd>Right Click</kbd> Switch Polarity</div>
+            <div><kbd>Space</kbd> Special (100 Energy)</div>
+        </div>
+        
+        <div id="hud-bottom">
+            <div class="hud-section">
+                <div>LIVES: <span id="lives">3</span></div>
+            </div>
+            <div class="hud-section">
+                <div>POLARITY: <span id="polarity">WHITE</span></div>
+                <div>ENERGY: <span id="energy">0</span>/100</div>
+                <div id="energy-bar-container">
+                    <div id="energy-bar-fill"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="stats">
+        <div>FPS: <span id="fps">60</span></div>
+        <div>Entities: <span id="entity-count">0</span></div>
+    </div>
+
+    <div id="game-over">
+        <h1>GAME OVER</h1>
+        <p>FINAL SCORE: <span id="final-score">0</span></p>
+        <p>MAX CHAIN: <span id="max-chain">0</span></p>
+        <p class="instruction">Press R to restart</p>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>

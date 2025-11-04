@@ -1,0 +1,26 @@
+{
+  "name": "bullet-hell",
+  "version": "0.1.0",
+  "description": "A polarity-based bullet hell game using three.js",
+  "main": "src/main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [
+    "game",
+    "bullet-hell",
+    "threejs",
+    "webgl"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.11"
+  }
+}
