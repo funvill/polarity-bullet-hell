@@ -6,4 +6,4 @@ The primary polarity mechanic is inspired by [Ikaruga](https://en.wikipedia.org/
 
 Full source code is provided.
 
-## [Play the game here](https://htmlpreview.github.io/?https://github.com/funvill/polarity-bullet-hell/blob/main/index.html)
+## [Play the game here](https://funvill.github.io/polarity-bullet-hell/)
