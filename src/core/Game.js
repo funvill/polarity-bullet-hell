@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { Input } from './Input.js';
+import { SeededRandom } from './SeededRandom.js';
 import { Player } from '../entities/Player.js';
 import { HUD } from '../ui/HUD.js';
 import { SpawnSystem } from '../systems/SpawnSystem.js';
+import { BackgroundSystem } from '../systems/BackgroundSystem.js';
 import { ParticleEffect, ExplosionEffect, AbsorptionEffect } from '../systems/ParticleEffects.js';
 import { ChainSystem } from '../systems/ChainSystem.js';
 import { ScoreSystem } from '../systems/ScoreSystem.js';
@@ -20,8 +22,18 @@ export class Game {
         this.score = 0;
         this.chain = 0;
         this.maxChain = 0;
+        this.chainPolarity = null; // Track active chain polarity
         this.lives = 3;
         this.energy = 0;
+        
+        // Game stats
+        this.stats = {
+            enemiesKilled: 0,
+            enemyTypes: {},
+            shotsFired: 0,
+            shotsHit: 0,
+            bulletsAbsorbed: 0
+        };
         
         // Timing
         this.clock = new THREE.Clock();
@@ -35,6 +47,9 @@ export class Game {
         this.timeScale = 1.0;
         this.freezeTimer = 0;
         
+        // World offset for camera-centered gameplay
+        this.worldOffset = { x: 0, y: 0 };
+        
                 // Camera effects
         this.cameraShakeAmount = 0;
         this.cameraShakeDecay = 0.9;
@@ -42,12 +57,12 @@ export class Game {
         this.cameraKickY = 0;
         this.cameraKickDecay = 0.85;
         
-        // Play area dimensions
+        // Play area dimensions - will be updated based on camera view
         this.playArea = {
-            width: 400,
+            width: 600,
             height: 600,
-            left: -200,
-            right: 200,
+            left: -300,
+            right: 300,
             top: 300,
             bottom: -300
         };
@@ -58,6 +73,10 @@ export class Game {
         this.enemies = [];
         this.powerUps = [];
         this.effects = [];
+        this.debris = []; // Persistent destroyed ship remains
+        
+        // Seeded random for predictable gameplay
+        this.random = new SeededRandom(42); // Fixed seed for predictable runs
         
         // Initialize systems
         this.initRenderer();
@@ -70,6 +89,7 @@ export class Game {
         this.chainSystem = new ChainSystem(this);
         this.scoreSystem = new ScoreSystem(this);
         this.audio = new AudioManager();
+        this.backgroundSystem = new BackgroundSystem(this);
         
         // Create player
         this.player = new Player(this);
@@ -98,9 +118,11 @@ export class Game {
     }
     
     initCamera() {
-        // Orthographic camera for top-down 2D view
+        // Orthographic camera for top-down 2D view - scale to window
         const aspect = window.innerWidth / window.innerHeight;
-        const viewHeight = this.playArea.height;
+        
+        // Use base height, scale width to aspect ratio
+        const viewHeight = 600;
         const viewWidth = viewHeight * aspect;
         
         this.camera = new THREE.OrthographicCamera(
@@ -114,6 +136,20 @@ export class Game {
         
         this.camera.position.set(0, 0, 100);
         this.camera.lookAt(0, 0, 0);
+        
+        // Update play area to match camera view
+        this.updatePlayArea(viewWidth, viewHeight);
+    }
+    
+    updatePlayArea(width, height) {
+        this.playArea = {
+            width: width,
+            height: height,
+            left: -width / 2,
+            right: width / 2,
+            top: height / 2,
+            bottom: -height / 2
+        };
     }
     
     initLights() {
@@ -128,7 +164,9 @@ export class Game {
     }
     
     createDebugHelpers() {
-        // Play area boundary visualization
+        // Play area boundary visualization (optional - can be disabled)
+        // Uncomment to show boundary lines for debugging
+        /*
         const boundaryGeometry = new THREE.EdgesGeometry(
             new THREE.PlaneGeometry(this.playArea.width, this.playArea.height)
         );
@@ -138,12 +176,7 @@ export class Game {
         });
         this.boundaryHelper = new THREE.LineSegments(boundaryGeometry, boundaryMaterial);
         this.scene.add(this.boundaryHelper);
-        
-        // Grid helper - at z = -1 so player renders on top
-        const gridHelper = new THREE.GridHelper(600, 20, 0x222222, 0x111111);
-        gridHelper.rotation.x = Math.PI / 2;
-        gridHelper.position.z = -1;
-        this.scene.add(gridHelper);
+        */
     }
     
     start() {
@@ -172,14 +205,35 @@ export class Game {
         console.log('Game stopped');
     }
     
+    togglePause() {
+        this.isPaused = !this.isPaused;
+        
+        const pauseElement = document.getElementById('pause-screen');
+        if (pauseElement) {
+            pauseElement.style.display = this.isPaused ? 'flex' : 'none';
+        }
+        
+        console.log(this.isPaused ? 'Game paused' : 'Game resumed');
+    }
+    
     restart() {
         // Reset game state
         this.score = 0;
         this.chain = 0;
         this.maxChain = 0;
+        this.chainPolarity = null; // Reset chain polarity
         this.lives = 3;
         this.energy = 0;
         this.gameState = 'PLAYING';
+        
+        // Reset stats
+        this.stats = {
+            enemiesKilled: 0,
+            enemyTypes: {},
+            shotsFired: 0,
+            shotsHit: 0,
+            bulletsAbsorbed: 0
+        };
         
         // Hide game over screen
         const gameOverElement = document.getElementById('game-over');
@@ -205,11 +259,22 @@ export class Game {
             powerUp.destroy();
         }
         
+        // Clear debris
+        for (const debris of this.debris) {
+            this.scene.remove(debris.mesh);
+            debris.geometry.dispose();
+            debris.material.dispose();
+        }
+        
         this.bullets = [];
         this.enemies = [];
         this.powerUps = [];
         this.effects = [];
+        this.debris = [];
         this.entities = [this.player];
+        
+        // Reset seeded random for consistent gameplay
+        this.random.reset();
         
         // Reset player
         this.player.reset();
@@ -268,8 +333,15 @@ export class Game {
             if (spaceKeyPressed) {
                 this.startGame();
             }
-        } else if (!this.isPaused && this.gameState === 'PLAYING') {
-            this.update(this.deltaTime);
+        } else if (this.gameState === 'PLAYING') {
+            // Check for pause
+            if (this.input.isPausePressed()) {
+                this.togglePause();
+            }
+            
+            if (!this.isPaused) {
+                this.update(this.deltaTime);
+            }
         } else if (this.gameState === 'GAME_OVER') {
             // Handle restart in game over state
             const rKeyPressed = this.input.isKeyPressed('KeyR');
@@ -289,6 +361,49 @@ export class Game {
             deltaTime *= 0.1; // Slow down to 10% speed during freeze
         } else {
             deltaTime *= this.timeScale;
+        }
+        
+        // Update world offset based on player velocity (player stays centered, world moves)
+        if (this.player && this.player.velocity) {
+            // Calculate movement delta (inverse of player movement)
+            const worldMovementX = -this.player.velocity.x * deltaTime;
+            const worldMovementY = -this.player.velocity.y * deltaTime;
+            
+            // No boundary limits - allow infinite scrolling
+            this.worldOffset.x += worldMovementX;
+            this.worldOffset.y += worldMovementY;
+            
+            // Move all enemies
+            for (let i = 0; i < this.enemies.length; i++) {
+                this.enemies[i].mesh.position.x += worldMovementX;
+                this.enemies[i].mesh.position.y += worldMovementY;
+            }
+            
+            // Move all bullets
+            for (let i = 0; i < this.bullets.length; i++) {
+                this.bullets[i].mesh.position.x += worldMovementX;
+                this.bullets[i].mesh.position.y += worldMovementY;
+            }
+            
+            // Move all power-ups
+            for (let i = 0; i < this.powerUps.length; i++) {
+                this.powerUps[i].mesh.position.x += worldMovementX;
+                this.powerUps[i].mesh.position.y += worldMovementY;
+            }
+            
+            // Move all debris
+            for (let i = 0; i < this.debris.length; i++) {
+                this.debris[i].mesh.position.x += worldMovementX;
+                this.debris[i].mesh.position.y += worldMovementY;
+            }
+            
+            // Move all effects
+            for (let i = 0; i < this.effects.length; i++) {
+                if (this.effects[i].mesh) {
+                    this.effects[i].mesh.position.x += worldMovementX;
+                    this.effects[i].mesh.position.y += worldMovementY;
+                }
+            }
         }
         
         // Update all entities
@@ -328,6 +443,32 @@ export class Game {
         
         // Update spawn system
         this.spawnSystem.update(deltaTime);
+        
+        // Update background scrolling
+        if (this.backgroundSystem) {
+            this.backgroundSystem.update(deltaTime);
+            
+            // Debris positions are in world space, no need to update them
+            // They'll move naturally with the camera
+            // Just remove debris that are too far from camera view
+            for (let i = this.debris.length - 1; i >= 0; i--) {
+                const debris = this.debris[i];
+                
+                // Remove debris that are too far from view (based on world coordinates)
+                const relativeX = debris.mesh.position.x - this.worldOffset.x;
+                const relativeY = debris.mesh.position.y - this.worldOffset.y;
+                
+                if (relativeY < this.playArea.bottom - 200 ||
+                    relativeY > this.playArea.top + 200 ||
+                    relativeX < this.playArea.left - 200 ||
+                    relativeX > this.playArea.right + 200) {
+                    this.scene.remove(debris.mesh);
+                    debris.geometry.dispose();
+                    debris.material.dispose();
+                    this.debris.splice(i, 1);
+                }
+            }
+        }
         
         // Update score system (popups)
         this.scoreSystem.update(deltaTime);
@@ -406,6 +547,9 @@ export class Game {
                     // Opposite polarity = 2x damage
                     const damage = 2;
                     
+                    // Track shot hit
+                    this.stats.shotsHit++;
+                    
                     // Add knockback effect
                     const knockbackForce = 15;
                     const bulletDir = bullet.velocity.clone().normalize();
@@ -417,6 +561,11 @@ export class Game {
                     
                     // If enemy is destroyed, add to score
                     if (enemy.isDead()) {
+                        // Track enemy kill
+                        this.stats.enemiesKilled++;
+                        const enemyType = enemy.constructor.name;
+                        this.stats.enemyTypes[enemyType] = (this.stats.enemyTypes[enemyType] || 0) + 1;
+                        
                         // Call onDestroy before removing to spawn children
                         if (enemy.onDestroy) {
                             enemy.onDestroy();
@@ -429,6 +578,9 @@ export class Game {
                         // Scale explosion by enemy size
                         const explosionSize = enemy.size || 'medium';
                         this.createExplosion(enemy.mesh.position, enemy.polarity, explosionSize);
+                        
+                        // Create persistent debris
+                        this.createDebris(enemy.mesh.position, enemy.polarity, explosionSize);
                         
                         // Chance to drop power-up
                         this.tryDropPowerUp(enemy.mesh.position);
@@ -490,29 +642,20 @@ export class Game {
             const enemy = this.enemies[i];
             if (this.checkCircleCollision(this.player.mesh.position, this.player.visualRadius,
                                          enemy.mesh.position, enemy.radius)) {
-                // Push player away from enemy
+                // Player is locked at center - push the enemy away instead
                 const dx = this.player.mesh.position.x - enemy.mesh.position.x;
                 const dy = this.player.mesh.position.y - enemy.mesh.position.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 
                 if (distance > 0) {
-                    // Normalize and push player away
+                    // Calculate push distance
                     const pushDistance = (this.player.visualRadius + enemy.radius) - distance;
                     const pushX = (dx / distance) * pushDistance;
                     const pushY = (dy / distance) * pushDistance;
                     
-                    this.player.mesh.position.x += pushX;
-                    this.player.mesh.position.y += pushY;
-                    
-                    // Clamp to play area
-                    this.player.mesh.position.x = Math.max(
-                        this.playArea.left + this.player.visualRadius,
-                        Math.min(this.player.mesh.position.x, this.playArea.right - this.player.visualRadius)
-                    );
-                    this.player.mesh.position.y = Math.max(
-                        this.playArea.bottom + this.player.visualRadius,
-                        Math.min(this.player.mesh.position.y, this.playArea.top - this.player.visualRadius)
-                    );
+                    // Push the enemy away (not the player)
+                    enemy.mesh.position.x -= pushX;
+                    enemy.mesh.position.y -= pushY;
                 }
             }
         }
@@ -527,6 +670,9 @@ export class Game {
     
     absorbBullet(polarity, position) {
         this.energy = Math.min(this.energy + 2, 100);
+        
+        // Track bullet absorption
+        this.stats.bulletsAbsorbed++;
         
         // Create absorption effect
         const color = polarity === 'WHITE' ? 0x00ffff : 0xff8800;
@@ -567,10 +713,56 @@ export class Game {
         this.audio.playExplosion(soundSize);
     }
     
+    createDebris(position, polarity, size = 'medium') {
+        // Create a gray, semi-transparent debris mesh
+        const debrisSize = size === 'large' ? 25 : size === 'medium' ? 15 : 10;
+        
+        // Create irregular debris shape (broken ship pieces)
+        const debrisGeometry = new THREE.CircleGeometry(debrisSize, 6); // Hexagonal broken shape
+        const debrisMaterial = new THREE.MeshBasicMaterial({
+            color: 0x444444, // Dark gray
+            transparent: true,
+            opacity: 0.5,
+            side: THREE.DoubleSide
+        });
+        
+        const debrisMesh = new THREE.Mesh(debrisGeometry, debrisMaterial);
+        debrisMesh.position.copy(position);
+        debrisMesh.position.z = -1; // Lower level than gameplay (background layer)
+        
+        // Random rotation for variety using seeded random
+        debrisMesh.rotation.z = this.random.nextFloat(0, Math.PI * 2);
+        
+        this.scene.add(debrisMesh);
+        
+        // Store debris reference - position is already in world space
+        this.debris.push({
+            mesh: debrisMesh,
+            geometry: debrisGeometry,
+            material: debrisMaterial
+        });
+        
+        // Limit debris count to prevent performance issues (keep last 50 pieces)
+        if (this.debris.length > 50) {
+            const oldDebris = this.debris.shift();
+            this.scene.remove(oldDebris.mesh);
+            oldDebris.geometry.dispose();
+            oldDebris.material.dispose();
+        }
+    }
+    
     playerHit() {
+        // Skip damage if invincible
+        if (this.player.invincible) {
+            return;
+        }
+        
         this.lives--;
         this.chainSystem.breakChain(); // Break chain on hit
         console.log(`Player hit! Lives: ${this.lives}`);
+        
+        // Activate invincibility
+        this.player.activateInvincibility();
         
         // Play hit sound
         this.audio.playHit();
@@ -599,10 +791,10 @@ export class Game {
     }
     
     tryDropPowerUp(position) {
-        // 15% chance to drop a power-up
-        if (Math.random() < 0.15) {
+        // 15% chance to drop a power-up using seeded random
+        if (this.random.chance(0.15)) {
             const types = Object.values(PowerUpTypes);
-            const randomType = types[Math.floor(Math.random() * types.length)];
+            const randomType = this.random.choose(types);
             
             const powerUp = new PowerUp(this, {
                 x: position.x,
@@ -618,8 +810,50 @@ export class Game {
     gameOver() {
         this.gameState = 'GAME_OVER';
         this.maxChain = Math.max(this.maxChain, this.chain);
+        
+        // Save high score
+        this.saveHighScore();
+        
         this.hud.showGameOver();
         console.log('Game Over!');
+    }
+    
+    saveHighScore() {
+        const highScores = this.getHighScores();
+        
+        // Add current score
+        const newScore = {
+            score: this.score,
+            maxChain: this.maxChain
+        };
+        
+        highScores.push(newScore);
+        
+        // Sort by score descending
+        highScores.sort((a, b) => b.score - a.score);
+        
+        // Keep only top 5
+        const top5 = highScores.slice(0, 5);
+        
+        localStorage.setItem('polarityHighScores', JSON.stringify(top5));
+        console.log('Saved high scores:', top5);
+    }
+    
+    getHighScores() {
+        const stored = localStorage.getItem('polarityHighScores');
+        if (stored) {
+            return JSON.parse(stored);
+        }
+        return [];
+    }
+    
+    getHighScore() {
+        // Legacy method for compatibility
+        const scores = this.getHighScores();
+        if (scores.length > 0) {
+            return scores[0];
+        }
+        return { score: 0, maxChain: 0 };
     }
     
     addScore(points) {
@@ -683,9 +917,11 @@ export class Game {
     }
     
     onResize() {
-        // Update camera
+        // Update camera to scale with window
         const aspect = window.innerWidth / window.innerHeight;
-        const viewHeight = this.playArea.height;
+        
+        // Use base height, scale width to aspect ratio
+        const viewHeight = 600;
         const viewWidth = viewHeight * aspect;
         
         this.camera.left = -viewWidth / 2;
@@ -693,6 +929,9 @@ export class Game {
         this.camera.top = viewHeight / 2;
         this.camera.bottom = -viewHeight / 2;
         this.camera.updateProjectionMatrix();
+        
+        // Update play area to match camera view
+        this.updatePlayArea(viewWidth, viewHeight);
         
         // Update renderer
         this.renderer.setSize(window.innerWidth, window.innerHeight);

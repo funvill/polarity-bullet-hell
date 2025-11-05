@@ -17,7 +17,6 @@ Key points covered include:
 - **Sleep (Pausing):** Briefly pausing the game on impact (using a "sleep" command) allows the brain to process the action, making it feel more significant.
 - **Adding Bass to Sound Effects:** Increasing the bass in gunshot sound effects can make weapons feel more powerful.
 - **Random Explosions:** Adding a chance for enemies to explode on death can create exciting and unpredictable moments.
-- **Camera Kick:** Moving the camera slightly in the opposite direction of the player's fire direction adds impact.
 - **Big Explosions:** Following the advice to "make really big explosions" to enhance the visual spectacle.
 - **Adding Meaning:** The most important step is to add meaning to the game by programming a game over state.
 
@@ -29,7 +28,7 @@ Key points covered include:
 - Directional Damage Indicators: Small UI or sprite cues showing where incoming damage originates.
 - Weapon Recoil Animations: Slight gun “kick” and sprite recoil synced to each shot improve tactile feel.
 - Bullet Trails / Glow: Faint particle trails behind bullets add velocity perception and make dodging clearer.
-- Slow-Mo on Kill / Boss Break: Brief time dilation when killing a boss or finishing a wave intensifies drama.
+- Don't do this - Slow-Mo on Kill / Boss Break: Brief time dilation when killing a boss or finishing a wave intensifies drama.
 
 ## 🧠 Player Control and Flow
 

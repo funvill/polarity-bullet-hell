@@ -52,11 +52,30 @@
             justify-content: space-between;
             align-items: flex-end;
         }
+        
+        #energy-display {
+            position: fixed;
+            right: 60px;
+            bottom: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px 15px;
+            border: 2px solid white;
+            display: none;
+        }
+        
+        #polarity-display {
+            position: fixed;
+            left: 20px;
+            bottom: 60px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px 15px;
+            border: 2px solid white;
+        }
 
         #controls-help {
             position: absolute;
             top: 20px;
-            right: 20px;
+            right: 60px;
             background: rgba(0, 0, 0, 0.7);
             border: 2px solid #666;
             padding: 10px;
@@ -90,20 +109,23 @@
         }
 
         #energy-bar-container {
-            width: 200px;
-            height: 20px;
+            position: fixed;
+            right: 20px;
+            top: 20px;
+            bottom: 20px;
+            width: 30px;
             background: rgba(0, 0, 0, 0.7);
             border: 2px solid white;
-            margin-top: 5px;
-            position: relative;
             overflow: hidden;
+            display: flex;
+            flex-direction: column-reverse;
         }
 
         #energy-bar-fill {
-            height: 100%;
-            width: 0%;
-            background: linear-gradient(90deg, #00ffff, #0099ff);
-            transition: width 0.2s;
+            width: 100%;
+            height: 0%;
+            background: linear-gradient(180deg, #00ffff, #0099ff);
+            transition: height 0.2s;
         }
 
         #energy-bar-fill.full {
@@ -121,6 +143,25 @@
             color: #ffff00;
             text-shadow: 0 0 10px #ffff00;
             animation: pulse-chain 1s infinite;
+            margin-top: 5px;
+            transform-origin: left center;
+        }
+        
+        #score {
+            font-size: 28px;
+            font-weight: bold;
+            color: #00ff00;
+            text-shadow: 0 0 15px #00ff00, 0 0 5px #00ff00;
+        }
+        
+        #score.pulse {
+            animation: score-pulse 0.2s ease-out;
+        }
+        
+        @keyframes score-pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); text-shadow: 0 0 25px #00ff00, 0 0 10px #00ff00; }
+            100% { transform: scale(1); }
         }
 
         @keyframes pulse-chain {
@@ -171,6 +212,31 @@
             margin-top: 30px;
             font-size: 16px;
             color: #888;
+        }
+        
+        .high-score-entry {
+            padding: 5px 10px;
+            margin: 3px 0;
+            border-radius: 3px;
+            color: #ffffff;
+        }
+        
+        .high-score-entry.current {
+            background: rgba(255, 255, 0, 0.2);
+            border: 2px solid #ffff00;
+            color: #ffff00;
+            animation: pulse-current-score 1.5s infinite;
+        }
+        
+        @keyframes pulse-current-score {
+            0%, 100% { 
+                transform: scale(1);
+                box-shadow: 0 0 10px rgba(255, 255, 0, 0.5);
+            }
+            50% { 
+                transform: scale(1.05);
+                box-shadow: 0 0 20px rgba(255, 255, 0, 0.8);
+            }
         }
 
         #start-screen {
@@ -247,6 +313,42 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.3; }
         }
+        
+        #pause-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 999;
+        }
+        
+        #pause-screen h1 {
+            font-size: 64px;
+            color: #00ffff;
+            text-shadow: 0 0 20px #00ffff;
+            margin-bottom: 20px;
+        }
+        
+        #pause-screen p {
+            font-size: 24px;
+            color: #aaa;
+        }
+        
+        #version {
+            position: fixed;
+            bottom: 5px;
+            right: 5px;
+            font-size: 12px;
+            color: #666;
+            font-family: monospace;
+        }
     </style>
 </head>
 <body>
@@ -256,18 +358,21 @@
         <div class="rules">
             <ul>
                 <li><kbd>Right Mouse Button</kbd> to change polarity (Black/White)</li>
+                <li><kbd>Left Mouse Button</kbd> to fire main weapon</li>
+                <li><kbd>Space Bar</kbd> triggers your special weapon when your energy is full</li>
                 <li>Absorb bullets of the same polarity to increase energy</li>
                 <li>Your bullets only harm ships of different polarity (black bullets hurt white ships)</li>
-                <li>When your energy is full, use the <kbd>Space Bar</kbd> to trigger bomb</li>
-                <li><kbd>Left Mouse Button</kbd> to fire main weapon</li>
-                <li><strong>High score wins</strong></li>
             </ul>
         </div>
         <div class="start-instruction">Press SPACE to start</div>
     </div>
 
     <canvas id="game-canvas"></canvas>
-    <canvas id="game-canvas"></canvas>
+    
+    <div id="pause-screen">
+        <h1>PAUSED</h1>
+        <p>Press P or ESC to resume</p>
+    </div>
     
     <div id="hud">
         <div id="hud-top">
@@ -284,19 +389,21 @@
             <div><kbd>Left Click</kbd> Fire</div>
             <div><kbd>Right Click</kbd> Switch Polarity</div>
             <div><kbd>Space</kbd> Special (100 Energy)</div>
+            <div><kbd>P</kbd> / <kbd>ESC</kbd> Pause</div>
         </div>
         
         <div id="hud-bottom">
             <div class="hud-section">
                 <div>LIVES: <span id="lives">3</span></div>
             </div>
-            <div class="hud-section">
-                <div>POLARITY: <span id="polarity">WHITE</span></div>
-                <div>ENERGY: <span id="energy">0</span>/100</div>
-                <div id="energy-bar-container">
-                    <div id="energy-bar-fill"></div>
-                </div>
-            </div>
+        </div>
+        
+        <div id="polarity-display">
+            <div>POLARITY: <span id="polarity">WHITE</span></div>
+        </div>
+        
+        <div id="energy-bar-container">
+            <div id="energy-bar-fill"></div>
         </div>
     </div>
 
@@ -304,11 +411,41 @@
         <div>FPS: <span id="fps">60</span></div>
         <div>Entities: <span id="entity-count">0</span></div>
     </div>
+    
+    <div id="debug-panel" style="position: absolute; bottom: 20px; right: 60px; background: rgba(0, 0, 0, 0.8); border: 2px solid #0f0; padding: 10px; font-family: monospace; font-size: 12px; color: #0f0; min-width: 250px;">
+        <div style="font-weight: bold; margin-bottom: 5px; color: #0ff;">DEBUG INFO</div>
+        <div>World Offset: <span id="debug-world-offset">0, 0</span></div>
+        <div>Center Tile: <span id="debug-center-tile">0, 0</span></div>
+        <div>Active Tiles: <span id="debug-active-tiles">0</span></div>
+        <div>Cached Tiles: <span id="debug-cached-tiles">0</span></div>
+        <div>Player Pos: <span id="debug-player-pos">0, 0</span></div>
+        <div>Tile Size: <span id="debug-tile-size">0</span></div>
+    </div>
+    
+    <div id="version">v0.1.0</div>
+    
+    <div id="osm-attribution" style="position: absolute; bottom: 5px; left: 5px; font-size: 10px; color: #888; z-index: 100; background: rgba(0,0,0,0.5); padding: 2px 5px; border-radius: 3px;">
+        Map © <a href="https://www.openstreetmap.org/copyright" target="_blank" style="color: #aaf; text-decoration: none;">OpenStreetMap</a> contributors, 
+        <a href="https://carto.com/" target="_blank" style="color: #aaf; text-decoration: none;">CARTO</a>
+    </div>
 
     <div id="game-over">
         <h1>GAME OVER</h1>
         <p>FINAL SCORE: <span id="final-score">0</span></p>
         <p>MAX CHAIN: <span id="max-chain">0</span></p>
+        
+        <div id="high-scores-display" style="margin-top: 30px;">
+            <h3 style="margin-bottom: 15px; color: #ffff00;">HIGH SCORES</h3>
+            <div id="high-scores-list" style="font-size: 18px; font-family: monospace;"></div>
+        </div>
+        
+        <div style="margin-top: 30px; text-align: left; font-size: 16px;">
+            <h3 style="text-align: center; margin-bottom: 10px;">RUN STATS</h3>
+            <p>Enemies Killed: <span id="stat-enemies-killed">0</span></p>
+            <p>Accuracy: <span id="stat-accuracy">0</span>%</p>
+            <p>Bullets Absorbed: <span id="stat-bullets-absorbed">0</span></p>
+            <div id="stat-enemy-types" style="margin-top: 10px;"></div>
+        </div>
         <p class="instruction">Press R to restart</p>
     </div>
 

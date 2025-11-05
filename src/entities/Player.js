@@ -7,8 +7,18 @@ export class Player {
         this.polarity = 'WHITE'; // WHITE or BLACK
         this.speed = 150; // units per second
         this.hitboxRadius = 4;
-        this.visualRadius = 15;
+        this.visualRadius = 8; // Reduced from 15 to 8 (just barely larger than hitbox)
         this.shieldRadius = this.visualRadius + 10; // Shield extends beyond ship
+        
+        // Velocity tracking for background scrolling
+        this.velocity = { x: 0, y: 0 };
+        
+        // Invincibility
+        this.invincible = false;
+        this.invincibilityTimer = 0;
+        this.invincibilityDuration = 3; // 3 seconds
+        this.blinkTimer = 0;
+        this.blinkInterval = 0.1; // Blink every 100ms
         
         // Firing
         this.fireRate = 5; // Reduced from 10 to 5 shots per second
@@ -90,39 +100,13 @@ export class Player {
     }
     
     createPolarityShield() {
-        // Create an outer ring that shows the current polarity
-        const innerRadius = this.visualRadius + 8;
-        const outerRadius = this.visualRadius + 12;
-        const ringGeometry = new THREE.RingGeometry(innerRadius, outerRadius, 32);
-        
-        this.shieldMaterial = new THREE.MeshBasicMaterial({
-            color: 0x00ffff, // Cyan for WHITE
-            side: THREE.DoubleSide,
-            transparent: true,
-            opacity: 0.7
-        });
-        
-        this.shieldRing = new THREE.Mesh(ringGeometry, this.shieldMaterial);
-        this.mesh.add(this.shieldRing);
-        
-        // Create a pulsing glow effect
-        const glowGeometry = new THREE.RingGeometry(innerRadius - 2, outerRadius + 2, 32);
-        this.glowMaterial = new THREE.MeshBasicMaterial({
-            color: 0x00ffff,
-            side: THREE.DoubleSide,
-            transparent: true,
-            opacity: 0.3
-        });
-        
-        this.glowRing = new THREE.Mesh(glowGeometry, this.glowMaterial);
-        this.mesh.add(this.glowRing);
-        
+        // Polarity shield removed per user request
         // Animation state
         this.shieldPulseTime = 0;
     }
     
     reset() {
-        this.mesh.position.set(0, -200, 0);
+        this.mesh.position.set(0, 0, 0); // Player always at center
         this.polarity = 'WHITE';
         this.updateColor();
     }
@@ -132,42 +116,49 @@ export class Player {
         this.updateFiring(deltaTime);
         this.updateShieldAnimation(deltaTime);
         this.updateLifeRings();
+        this.updateInvincibility(deltaTime);
+    }
+    
+    updateInvincibility(deltaTime) {
+        if (this.invincible) {
+            this.invincibilityTimer -= deltaTime;
+            this.blinkTimer += deltaTime;
+            
+            // Blink effect
+            if (this.blinkTimer >= this.blinkInterval) {
+                this.mesh.visible = !this.mesh.visible;
+                this.blinkTimer = 0;
+            }
+            
+            // End invincibility
+            if (this.invincibilityTimer <= 0) {
+                this.invincible = false;
+                this.mesh.visible = true;
+            }
+        }
+    }
+    
+    activateInvincibility() {
+        this.invincible = true;
+        this.invincibilityTimer = this.invincibilityDuration;
+        this.blinkTimer = 0;
     }
     
     updateShieldAnimation(deltaTime) {
-        // Pulse the shield/ring
+        // Shield animation removed per user request
         this.shieldPulseTime += deltaTime * 3;
-        const pulse = Math.sin(this.shieldPulseTime) * 0.2 + 0.8;
-        
-        // Scale the glow ring
-        this.glowRing.scale.set(pulse, pulse, 1);
-        
-        // Pulse opacity
-        this.glowMaterial.opacity = (Math.sin(this.shieldPulseTime * 2) * 0.15 + 0.25);
-        
-        // Rotate the shield slowly
-        this.shieldRing.rotation.z += deltaTime * 0.5;
-        this.glowRing.rotation.z -= deltaTime * 0.3;
     }
     
     handleInput(deltaTime) {
-        // Movement
+        // Movement - player visual stays at center, but we track velocity to move the world
         const movement = this.game.input.getMovementInput();
-        if (movement.x !== 0 || movement.y !== 0) {
-            this.mesh.position.x += movement.x * this.speed * deltaTime;
-            this.mesh.position.y += movement.y * this.speed * deltaTime;
-            
-            // Clamp to play area - use smaller margin so player can reach edges
-            const margin = 5; // Small margin to keep ship visible
-            this.mesh.position.x = Math.max(
-                this.game.playArea.left + margin,
-                Math.min(this.mesh.position.x, this.game.playArea.right - margin)
-            );
-            this.mesh.position.y = Math.max(
-                this.game.playArea.bottom + margin,
-                Math.min(this.mesh.position.y, this.game.playArea.top - margin)
-            );
-        }
+        
+        // Update velocity for world movement
+        this.velocity.x = movement.x * this.speed;
+        this.velocity.y = movement.y * this.speed;
+        
+        // Player mesh NEVER moves - it stays at (0, 0)
+        // The world moves around the player instead
         
         // Rotate ship to face mouse
         this.rotateTowardsMouse();
@@ -223,6 +214,9 @@ export class Player {
     }
     
     fire() {
+        // Track shot fired
+        this.game.stats.shotsFired++;
+        
         // Calculate direction based on ship's rotation
         const angle = -this.mesh.rotation.z; // Negative because we inverted it in rotation
         const direction = new THREE.Vector3(
@@ -327,11 +321,6 @@ export class Player {
     updateColor() {
         const color = this.polarity === 'WHITE' ? 0xffffff : 0x000000;
         this.material.color.setHex(color);
-        
-        // Update shield color based on polarity
-        const shieldColor = this.polarity === 'WHITE' ? 0x00ffff : 0xff8800; // Cyan for WHITE, Orange for BLACK
-        this.shieldMaterial.color.setHex(shieldColor);
-        this.glowMaterial.color.setHex(shieldColor);
         
         // Add a colored outline based on polarity
         if (this.outline) {

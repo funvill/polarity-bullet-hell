@@ -43,6 +43,7 @@ export class Boss {
         // Add multiple outline rings for boss look
         const outlineColor = this.polarity === 'WHITE' ? 0x00ffff : 0xff8800;
         
+        this.outlineRings = []; // Store ring references for color updates
         for (let i = 0; i < 3; i++) {
             const ringRadius = this.radius + (i * 4);
             const outlineGeometry = new THREE.RingGeometry(ringRadius, ringRadius + 2, 8);
@@ -53,6 +54,7 @@ export class Boss {
             });
             const ring = new THREE.Mesh(outlineGeometry, outlineMaterial);
             this.mesh.add(ring);
+            this.outlineRings.push({ mesh: ring, material: outlineMaterial });
         }
         
         // Add core glow
@@ -63,6 +65,7 @@ export class Boss {
             opacity: 0.6
         });
         this.glow = new THREE.Mesh(glowGeometry, glowMaterial);
+        this.glowMaterial = glowMaterial; // Store reference for color updates
         this.mesh.add(this.glow);
         
         // Create health bar
@@ -141,9 +144,9 @@ export class Boss {
     }
     
     executeAttack() {
-        // Choose attack based on phase
+        // Choose attack based on phase using seeded random
         const attacks = this.getAttacksForPhase();
-        this.currentAttack = attacks[Math.floor(Math.random() * attacks.length)];
+        this.currentAttack = this.game.random.choose(attacks);
         
         console.log(`Boss executing attack: ${this.currentAttack}`);
         
@@ -343,11 +346,6 @@ export class Boss {
         this.hp -= amount;
         console.log(`Boss took ${amount} damage. HP: ${this.hp}/${this.maxHp}`);
         
-        // Hit freeze on boss damage
-        if (this.game.hitFreeze) {
-            this.game.hitFreeze(0.03); // 30ms freeze
-        }
-        
         // Visual feedback - flash
         const originalColor = this.material.color.getHex();
         this.material.color.setHex(0xff0000);
@@ -434,8 +432,26 @@ export class Boss {
     }
     
     updateColor() {
+        // Update main body color
         const color = this.polarity === 'WHITE' ? 0xeeeeee : 0x333333;
         this.material.color.setHex(color);
+        
+        // Update outline rings and glow color to match polarity
+        const outlineColor = this.polarity === 'WHITE' ? 0x00ffff : 0xff8800;
+        
+        // Update all outline rings
+        if (this.outlineRings) {
+            for (const ring of this.outlineRings) {
+                ring.material.color.setHex(outlineColor);
+            }
+        }
+        
+        // Update glow
+        if (this.glowMaterial) {
+            this.glowMaterial.color.setHex(outlineColor);
+        }
+        
+        console.log(`Boss polarity switched to ${this.polarity} with color update`);
     }
     
     isDead() {
@@ -463,12 +479,12 @@ export class Boss {
     }
     
     spawnDebris() {
-        // Spawn 4-6 normal enemies as debris
-        const debrisCount = 4 + Math.floor(Math.random() * 3);
+        // Spawn 4-6 normal enemies as debris using seeded random
+        const debrisCount = 4 + this.game.random.nextInt(0, 2);
         
         for (let i = 0; i < debrisCount; i++) {
-            const angle = (Math.PI * 2 * i / debrisCount) + Math.random() * 0.5;
-            const speed = 80 + Math.random() * 40;
+            const angle = (Math.PI * 2 * i / debrisCount) + this.game.random.nextFloat(0, 0.5);
+            const speed = 80 + this.game.random.nextFloat(0, 40);
             
             const direction = new THREE.Vector3(
                 Math.cos(angle),

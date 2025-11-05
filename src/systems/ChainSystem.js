@@ -4,9 +4,15 @@ export class ChainSystem {
         this.chainQueue = []; // Last 3 enemy kills
         this.chainCount = 0;
         this.maxChain = 0;
+        this.chainPolarity = null; // Track which polarity the current chain is
     }
     
     onEnemyDestroyed(polarity) {
+        // If we have an active chain and kill opposite polarity, break the chain
+        if (this.chainPolarity && polarity !== this.chainPolarity) {
+            this.breakChain();
+        }
+        
         // Add to queue
         this.chainQueue.push(polarity);
         
@@ -21,9 +27,11 @@ export class ChainSystem {
             
             if (allSame) {
                 this.chainCount++;
+                this.chainPolarity = polarity; // Set chain polarity
                 this.maxChain = Math.max(this.maxChain, this.chainCount);
                 this.game.chain = this.chainCount;
                 this.game.maxChain = this.maxChain;
+                this.game.chainPolarity = this.chainPolarity; // Expose to game
                 
                 console.log(`CHAIN: ${this.chainCount}! (${polarity})`);
                 this.createChainEffect();
@@ -39,7 +47,9 @@ export class ChainSystem {
             console.log(`Chain broken at ${this.chainCount}`);
             this.chainCount = 0;
             this.chainQueue = [];
+            this.chainPolarity = null; // Reset polarity
             this.game.chain = 0;
+            this.game.chainPolarity = null;
         }
     }
     

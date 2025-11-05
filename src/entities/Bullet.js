@@ -62,9 +62,6 @@ export class Bullet {
         this.mesh.position.y += this.velocity.y * deltaTime;
         this.mesh.position.z += this.velocity.z * deltaTime;
         
-        // Optional: rotate the bullet for visual effect
-        this.mesh.rotation.z += deltaTime * 2;
-        
         // Pulse the glow for player bullets
         if (this.owner === 'player' && this.outline) {
             const pulse = Math.sin(Date.now() * 0.01) * 0.2 + 0.8;

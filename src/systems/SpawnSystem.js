@@ -74,11 +74,12 @@ export class SpawnSystem {
         // Alternate between white and black enemies
         const polarity = this.waveNumber % 2 === 0 ? 'WHITE' : 'BLACK';
         
-        // Choose a random spawn pattern
-        const pattern = this.patterns[this.waveNumber % this.patterns.length];
+        // Choose a spawn pattern using seeded random for predictability
+        const patternIndex = this.game.random.nextInt(0, this.patterns.length - 1);
+        const pattern = this.patterns[patternIndex];
         pattern(polarity);
         
-        console.log(`Wave ${this.waveNumber}: ${polarity} enemies`);
+        console.log(`Wave ${this.waveNumber}: ${polarity} enemies (pattern ${patternIndex})`);
     }
     
     spawnBoss() {
@@ -217,7 +218,7 @@ export class SpawnSystem {
         const multipliers = this.getDifficultyMultipliers();
         
         // Determine if this should be a special enemy (20% chance at wave 5+)
-        const shouldBeSpecial = this.waveNumber >= 5 && Math.random() < 0.2;
+        const shouldBeSpecial = this.waveNumber >= 5 && this.game.random.chance(0.2);
         
         if (shouldBeSpecial && !config.forceNormal) {
             return this.createSpecialEnemy(config, multipliers);
@@ -226,7 +227,7 @@ export class SpawnSystem {
         // Randomly choose enemy size - higher levels spawn larger enemies
         let size = config.size || 'medium';
         if (!config.size) {
-            const rand = Math.random();
+            const rand = this.game.random.next();
             if (this.difficultyLevel >= 3) {
                 if (rand < 0.2) size = 'large';
                 else if (rand < 0.5) size = 'medium';
@@ -260,9 +261,9 @@ export class SpawnSystem {
     }
     
     createSpecialEnemy(config, multipliers) {
-        // Choose a random special enemy type
+        // Choose a special enemy type using seeded random
         const types = ['sniper', 'sprayer', 'kamikaze', 'tank', 'dodger'];
-        const enemyType = types[Math.floor(Math.random() * types.length)];
+        const enemyType = this.game.random.choose(types);
         
         const specialEnemy = new SpecialEnemy(this.game, {
             position: { 

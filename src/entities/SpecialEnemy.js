@@ -176,7 +176,10 @@ export class SpecialEnemy extends Enemy {
         const playerPos = this.game.player.mesh.position;
         const playerVel = this.game.player.velocity;
         const timeToHit = this.mesh.position.distanceTo(playerPos) / this.bulletSpeed;
-        const predictedPos = playerPos.clone().add(playerVel.clone().multiplyScalar(timeToHit));
+        
+        // Convert velocity object to Vector3 for prediction
+        const playerVelVec = new THREE.Vector3(playerVel.x, playerVel.y, 0);
+        const predictedPos = playerPos.clone().add(playerVelVec.clone().multiplyScalar(timeToHit));
         
         const direction = new THREE.Vector3()
             .subVectors(predictedPos, this.mesh.position)

@@ -134,4 +134,8 @@ export class Input {
     isPolaritySwitchPressed() {
         return this.isMouseButtonPressed(2); // Right mouse button
     }
+    
+    isPausePressed() {
+        return this.isKeyPressed('KeyP') || this.isKeyPressed('Escape');
+    }
 }

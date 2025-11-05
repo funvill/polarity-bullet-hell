@@ -21,12 +21,12 @@ export class Enemy {
         
         // Firing
         this.fireRate = config.fireRate || 1; // shots per second
-        this.fireTimer = Math.random() * (1 / this.fireRate); // Random initial delay
+        this.fireTimer = this.game.random.next() * (1 / this.fireRate); // Random initial delay
         this.fireInterval = 1 / this.fireRate;
         this.bulletSpeed = config.bulletSpeed || 100; // Bullet speed
         
         // Add slight randomness to fire interval for variety
-        this.fireIntervalVariation = 0.9 + Math.random() * 0.2; // 90% to 110%
+        this.fireIntervalVariation = 0.9 + this.game.random.next() * 0.2; // 90% to 110%
         
         this.createMesh(config.position);
     }
@@ -78,11 +78,11 @@ export class Enemy {
             // Apply variation to next fire interval
             this.fireTimer = this.fireInterval * this.fireIntervalVariation;
             // Generate new variation for next time
-            this.fireIntervalVariation = 0.9 + Math.random() * 0.2;
+            this.fireIntervalVariation = 0.9 + this.game.random.next() * 0.2;
         }
         
-        // Rotate slowly
-        this.mesh.rotation.z += deltaTime * 0.5;
+        // Don't rotate - keep enemies stationary
+        // this.mesh.rotation.z += deltaTime * 0.5;
     }
     
     updateMovement(deltaTime) {
