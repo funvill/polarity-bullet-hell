@@ -1,3 +1,6 @@
+import retroMetalUrl from '../assets/retro_metal.ogg';
+import glitchUrl from '../assets/glitch.ogg';
+
 export class AudioManager {
     constructor() {
         this.context = null;
@@ -11,6 +14,14 @@ export class AudioManager {
         this.musicGain = null;
         this.currentMusicMode = 'normal'; // normal, danger, boss
         
+        // Background music tracks
+        this.musicTracks = {
+            retro: null,
+            glitch: null
+        };
+        this.currentTrack = null;
+        this.musicSource = null;
+        
         // Initialize audio context on first user interaction
         this.initialized = false;
     }
@@ -22,13 +33,71 @@ export class AudioManager {
             this.context = new (window.AudioContext || window.webkitAudioContext)();
             this.initialized = true;
             
-            // Start background music
-            this.startMusic();
+            // Load background music files
+            this.loadMusicFiles();
             
             console.log('Audio system initialized');
         } catch (e) {
             console.warn('Web Audio API not supported:', e);
             this.enabled = false;
+        }
+    }
+    
+    async loadMusicFiles() {
+        // Load the two music tracks
+        try {
+            const retroResponse = await fetch(retroMetalUrl);
+            const retroBuffer = await retroResponse.arrayBuffer();
+            this.musicTracks.retro = await this.context.decodeAudioData(retroBuffer);
+            
+            const glitchResponse = await fetch(glitchUrl);
+            const glitchBuffer = await glitchResponse.arrayBuffer();
+            this.musicTracks.glitch = await this.context.decodeAudioData(glitchBuffer);
+            
+            console.log('Music files loaded successfully');
+            
+            // Start playing retro_metal by default
+            this.playBackgroundMusic('retro');
+        } catch (e) {
+            console.warn('Failed to load music files:', e);
+            // Fall back to procedural music
+            this.startMusic();
+        }
+    }
+    
+    playBackgroundMusic(track = 'retro') {
+        if (!this.enabled || !this.initialized) return;
+        if (!this.musicTracks[track]) {
+            console.warn(`Music track "${track}" not loaded`);
+            return;
+        }
+        
+        // Stop current music if playing
+        if (this.musicSource) {
+            this.musicSource.stop();
+        }
+        
+        // Create gain node for music volume control
+        if (!this.musicGain) {
+            this.musicGain = this.context.createGain();
+            this.musicGain.gain.value = this.musicVolume;
+            this.musicGain.connect(this.context.destination);
+        }
+        
+        // Create and start new source
+        this.musicSource = this.context.createBufferSource();
+        this.musicSource.buffer = this.musicTracks[track];
+        this.musicSource.loop = true;
+        this.musicSource.connect(this.musicGain);
+        this.musicSource.start(0);
+        
+        this.currentTrack = track;
+        console.log(`Playing background music: ${track}`);
+    }
+    
+    switchMusicTrack(track) {
+        if (track !== this.currentTrack) {
+            this.playBackgroundMusic(track);
         }
     }
     
@@ -359,17 +428,29 @@ export class AudioManager {
     }
     
     stopMusic() {
-        if (!this.musicOscillators.length) return;
-        
-        this.musicOscillators.forEach(({ osc }) => {
+        // Stop file-based music
+        if (this.musicSource) {
             try {
-                osc.stop();
+                this.musicSource.stop();
+                this.musicSource = null;
+                this.currentTrack = null;
             } catch(e) {
                 // Already stopped
             }
-        });
+        }
         
-        this.musicOscillators = [];
+        // Stop procedural music oscillators
+        if (this.musicOscillators.length) {
+            this.musicOscillators.forEach(({ osc }) => {
+                try {
+                    osc.stop();
+                } catch(e) {
+                    // Already stopped
+                }
+            });
+            this.musicOscillators = [];
+        }
+        
         console.log('Music stopped');
     }
 }

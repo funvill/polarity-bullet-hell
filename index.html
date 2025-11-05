@@ -23,6 +23,23 @@
             height: 100vh;
         }
 
+        /* Damage vignette - red glow when hit */
+        #damage-vignette {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            box-shadow: inset 0 0 30px 30px rgba(255, 0, 0, 0);
+            transition: box-shadow 0.1s ease-out;
+            z-index: 1000;
+        }
+
+        #damage-vignette.flash {
+            box-shadow: inset 0 0 30px 30px rgba(255, 0, 0, 0.8);
+        }
+
         #hud {
             position: absolute;
             top: 0;
@@ -37,27 +54,17 @@
         #hud-top {
             position: absolute;
             top: 20px;
-            left: 20px;
+            left: 60px;
             right: 20px;
             display: flex;
             justify-content: space-between;
-        }
-
-        #hud-bottom {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            right: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-end;
         }
         
         #energy-display {
             position: fixed;
             right: 60px;
             bottom: 20px;
-            background: rgba(0, 0, 0, 0.5);
+            background: rgba(0, 0, 0, 0.8);
             padding: 10px 15px;
             border: 2px solid white;
             display: none;
@@ -65,9 +72,9 @@
         
         #polarity-display {
             position: fixed;
-            left: 20px;
-            bottom: 60px;
-            background: rgba(0, 0, 0, 0.5);
+            left: 60px;
+            bottom: 30px;
+            background: rgba(0, 0, 0, 0.8);
             padding: 10px 15px;
             border: 2px solid white;
         }
@@ -76,7 +83,7 @@
             position: absolute;
             top: 20px;
             right: 60px;
-            background: rgba(0, 0, 0, 0.7);
+            background: rgba(0, 0, 0, 0.8);
             border: 2px solid #666;
             padding: 10px;
             font-size: 12px;
@@ -103,32 +110,54 @@
         }
 
         .hud-section {
-            background: rgba(0, 0, 0, 0.5);
+            background: rgba(0, 0, 0, 0.8);
             padding: 10px 15px;
             border: 2px solid white;
         }
 
-        #energy-bar-container {
+        /* Shield energy bar (left side, white/cyan) */
+        #shield-bar-container {
             position: fixed;
-            right: 20px;
+            left: 20px;
             top: 20px;
             bottom: 20px;
             width: 30px;
-            background: rgba(0, 0, 0, 0.7);
-            border: 2px solid white;
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid #00ffff;
             overflow: hidden;
             display: flex;
             flex-direction: column-reverse;
         }
 
-        #energy-bar-fill {
+        #shield-bar-fill {
             width: 100%;
-            height: 0%;
+            height: 50%;
             background: linear-gradient(180deg, #00ffff, #0099ff);
             transition: height 0.2s;
         }
 
-        #energy-bar-fill.full {
+        /* Weapon energy bar (right side, black/orange) */
+        #weapon-bar-container {
+            position: fixed;
+            right: 20px;
+            top: 20px;
+            bottom: 20px;
+            width: 30px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid #ff8800;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column-reverse;
+        }
+
+        #weapon-bar-fill {
+            width: 100%;
+            height: 0%;
+            background: linear-gradient(180deg, #ff8800, #ff4400);
+            transition: height 0.2s;
+        }
+
+        #weapon-bar-fill.full {
             animation: pulse-energy 0.5s infinite;
         }
 
@@ -158,6 +187,13 @@
             animation: score-pulse 0.2s ease-out;
         }
         
+        #money {
+            font-size: 24px;
+            font-weight: bold;
+            color: #ffdd00;
+            text-shadow: 0 0 10px #ffaa00, 0 0 20px #ff8800, 0 0 5px #ffdd00;
+        }
+        
         @keyframes score-pulse {
             0% { transform: scale(1); }
             50% { transform: scale(1.3); text-shadow: 0 0 25px #00ff00, 0 0 10px #00ff00; }
@@ -180,7 +216,7 @@
             right: 10px;
             font-size: 12px;
             color: #0f0;
-            background: rgba(0, 0, 0, 0.7);
+            background: rgba(0, 0, 0, 0.8);
             padding: 5px;
             font-family: monospace;
         }
@@ -369,6 +405,9 @@
 
     <canvas id="game-canvas"></canvas>
     
+    <!-- Damage vignette effect -->
+    <div id="damage-vignette"></div>
+    
     <div id="pause-screen">
         <h1>PAUSED</h1>
         <p>Press P or ESC to resume</p>
@@ -378,6 +417,7 @@
         <div id="hud-top">
             <div class="hud-section">
                 <div>SCORE: <span id="score">0</span></div>
+                <div>MONEY: <span id="money">0</span></div>
                 <div id="chain-display">CHAIN: x<span id="chain">0</span></div>
             </div>
         </div>
@@ -388,22 +428,22 @@
             <div><kbd>Mouse</kbd> Aim</div>
             <div><kbd>Left Click</kbd> Fire</div>
             <div><kbd>Right Click</kbd> Switch Polarity</div>
-            <div><kbd>Space</kbd> Special (100 Energy)</div>
+            <div><kbd>Space</kbd> Special (100 Black)</div>
             <div><kbd>P</kbd> / <kbd>ESC</kbd> Pause</div>
-        </div>
-        
-        <div id="hud-bottom">
-            <div class="hud-section">
-                <div>LIVES: <span id="lives">3</span></div>
-            </div>
         </div>
         
         <div id="polarity-display">
             <div>POLARITY: <span id="polarity">WHITE</span></div>
         </div>
         
-        <div id="energy-bar-container">
-            <div id="energy-bar-fill"></div>
+        <!-- Shield energy bar (left side, white) -->
+        <div id="shield-bar-container">
+            <div id="shield-bar-fill"></div>
+        </div>
+        
+        <!-- Weapon energy bar (right side, black) -->
+        <div id="weapon-bar-container">
+            <div id="weapon-bar-fill"></div>
         </div>
     </div>
 
@@ -427,7 +467,7 @@
     <div id="osm-attribution" style="position: absolute; bottom: 5px; left: 5px; font-size: 10px; color: #888; z-index: 100; background: rgba(0,0,0,0.5); padding: 2px 5px; border-radius: 3px;">
         Map © <a href="https://www.openstreetmap.org/copyright" target="_blank" style="color: #aaf; text-decoration: none;">OpenStreetMap</a> contributors, 
         <a href="https://carto.com/" target="_blank" style="color: #aaf; text-decoration: none;">CARTO</a>
-    </div>
+    </div> 
 
     <div id="game-over">
         <h1>GAME OVER</h1>
@@ -446,7 +486,7 @@
             <p>Bullets Absorbed: <span id="stat-bullets-absorbed">0</span></p>
             <div id="stat-enemy-types" style="margin-top: 10px;"></div>
         </div>
-        <p class="instruction">Press R to restart</p>
+        <p class="instruction">Press SPACE or R to restart</p>
     </div>
 
     <script type="module" src="/src/main.js"></script>

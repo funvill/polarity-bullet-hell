@@ -10,6 +10,7 @@ import { ChainSystem } from '../systems/ChainSystem.js';
 import { ScoreSystem } from '../systems/ScoreSystem.js';
 import { PowerUp, PowerUpTypes } from '../entities/PowerUp.js';
 import { AudioManager } from '../systems/AudioManager.js';
+import { Collectible } from '../entities/Collectible.js';
 
 export class Game {
     constructor(canvas) {
@@ -23,8 +24,9 @@ export class Game {
         this.chain = 0;
         this.maxChain = 0;
         this.chainPolarity = null; // Track active chain polarity
-        this.lives = 3;
-        this.energy = 0;
+        this.whiteEnergy = 50; // Shield energy (start at 50%)
+        this.blackEnergy = 0; // Weapon energy
+        this.money = 0; // Currency from enemy drops
         
         // Game stats
         this.stats = {
@@ -72,6 +74,7 @@ export class Game {
         this.bullets = [];
         this.enemies = [];
         this.powerUps = [];
+        this.collectibles = []; // Money drops from enemies
         this.effects = [];
         this.debris = []; // Persistent destroyed ship remains
         
@@ -221,9 +224,10 @@ export class Game {
         this.score = 0;
         this.chain = 0;
         this.maxChain = 0;
-        this.chainPolarity = null; // Reset chain polarity
-        this.lives = 3;
-        this.energy = 0;
+        this.chainPolarity = null;
+        this.whiteEnergy = 50; // Shield energy (start at 50%)
+        this.blackEnergy = 0; // Weapon energy
+        this.money = 0; // Currency from enemy drops
         this.gameState = 'PLAYING';
         
         // Reset stats
@@ -259,16 +263,21 @@ export class Game {
             powerUp.destroy();
         }
         
+        // Clear collectibles
+        for (const collectible of this.collectibles) {
+            collectible.destroy();
+        }
+        
         // Clear debris
         for (const debris of this.debris) {
             this.scene.remove(debris.mesh);
-            debris.geometry.dispose();
             debris.material.dispose();
         }
         
         this.bullets = [];
         this.enemies = [];
         this.powerUps = [];
+        this.collectibles = [];
         this.effects = [];
         this.debris = [];
         this.entities = [this.player];
@@ -345,7 +354,8 @@ export class Game {
         } else if (this.gameState === 'GAME_OVER') {
             // Handle restart in game over state
             const rKeyPressed = this.input.isKeyPressed('KeyR');
-            if (rKeyPressed) {
+            const spacePressed = this.input.isKeyPressed('Space');
+            if (rKeyPressed || spacePressed) {
                 this.restart();
             }
         }
@@ -389,6 +399,12 @@ export class Game {
             for (let i = 0; i < this.powerUps.length; i++) {
                 this.powerUps[i].mesh.position.x += worldMovementX;
                 this.powerUps[i].mesh.position.y += worldMovementY;
+            }
+            
+            // Move all collectibles
+            for (let i = 0; i < this.collectibles.length; i++) {
+                this.collectibles[i].mesh.position.x += worldMovementX;
+                this.collectibles[i].mesh.position.y += worldMovementY;
             }
             
             // Move all debris
@@ -440,6 +456,57 @@ export class Game {
                 this.removeEnemy(enemy);
             }
         }
+
+        // Simple enemy separation: prevent enemies from overlapping by pushing them apart
+        // This is an O(n^2) pass but enemy counts are small. Adjust maxPush for tuning.
+        const enemyCount = this.enemies.length;
+        const maxPushPerSecond = 200; // units per second maximum push to resolve overlaps
+        const maxPush = maxPushPerSecond * deltaTime;
+        for (let i = 0; i < enemyCount; i++) {
+            const a = this.enemies[i];
+            if (!a || !a.mesh) continue;
+            for (let j = i + 1; j < enemyCount; j++) {
+                const b = this.enemies[j];
+                if (!b || !b.mesh) continue;
+
+                const dx = a.mesh.position.x - b.mesh.position.x;
+                const dy = a.mesh.position.y - b.mesh.position.y;
+                let dist = Math.sqrt(dx * dx + dy * dy);
+                const rA = a.radius || (a.visualRadius || 15);
+                const rB = b.radius || (b.visualRadius || 15);
+                const minDist = rA + rB;
+
+                if (dist === 0) {
+                    // Same position - nudge randomly
+                    const nudgex = (Math.random() - 0.5) * 2;
+                    const nudgey = (Math.random() - 0.5) * 2;
+                    a.mesh.position.x += nudgex;
+                    a.mesh.position.y += nudgey;
+                    b.mesh.position.x -= nudgex;
+                    b.mesh.position.y -= nudgey;
+                    continue;
+                }
+
+                if (dist < minDist) {
+                    const overlap = minDist - dist;
+                    // Normalized push vector from b -> a
+                    const nx = dx / dist;
+                    const ny = dy / dist;
+
+                    // Half of overlap to separate both, clamped by maxPush
+                    let push = (overlap * 0.5);
+                    if (push > maxPush) push = maxPush;
+
+                    const pushX = nx * push;
+                    const pushY = ny * push;
+
+                    a.mesh.position.x += pushX;
+                    a.mesh.position.y += pushY;
+                    b.mesh.position.x -= pushX;
+                    b.mesh.position.y -= pushY;
+                }
+            }
+        }
         
         // Update spawn system
         this.spawnSystem.update(deltaTime);
@@ -463,8 +530,9 @@ export class Game {
                     relativeX < this.playArea.left - 200 ||
                     relativeX > this.playArea.right + 200) {
                     this.scene.remove(debris.mesh);
-                    debris.geometry.dispose();
-                    debris.material.dispose();
+                    if (debris.material) {
+                        debris.material.dispose();
+                    }
                     this.debris.splice(i, 1);
                 }
             }
@@ -472,6 +540,26 @@ export class Game {
         
         // Update score system (popups)
         this.scoreSystem.update(deltaTime);
+        
+        // Update collectibles
+        for (let i = this.collectibles.length - 1; i >= 0; i--) {
+            const collectible = this.collectibles[i];
+            const collected = collectible.update(deltaTime);
+            
+            if (collected) {
+                // Add money
+                this.money += collectible.value;
+                
+                // Play collection sound
+                this.audio.playAbsorb();
+                
+                // Remove collectible
+                collectible.destroy();
+                this.collectibles.splice(i, 1);
+                
+                console.log(`Collected! Money: ${this.money}`);
+            }
+        }
         
         // Update music mode based on game state
         this.updateMusicMode();
@@ -559,8 +647,11 @@ export class Game {
                     enemy.takeDamage(damage);
                     this.removeBullet(bullet);
                     
+                    console.log(`Enemy hit! HP: ${enemy.hp}/${enemy.maxHp}, isDead: ${enemy.isDead()}`);
+                    
                     // If enemy is destroyed, add to score
                     if (enemy.isDead()) {
+                        console.log(`%c★ ENEMY KILLED! ★ Type: ${enemy.constructor.name}, HP was: ${enemy.hp}/${enemy.maxHp}`, 'color: lime; font-weight: bold');
                         // Track enemy kill
                         this.stats.enemiesKilled++;
                         const enemyType = enemy.constructor.name;
@@ -579,8 +670,11 @@ export class Game {
                         const explosionSize = enemy.size || 'medium';
                         this.createExplosion(enemy.mesh.position, enemy.polarity, explosionSize);
                         
-                        // Create persistent debris
-                        this.createDebris(enemy.mesh.position, enemy.polarity, explosionSize);
+                        // Create persistent debris using enemy's dead sprite
+                        this.createDebris(enemy.mesh.position, enemy.polarity, explosionSize, enemy);
+                        
+                        // Drop collectibles based on enemy difficulty
+                        this.dropCollectibles(enemy.mesh.position, enemy);
                         
                         // Chance to drop power-up
                         this.tryDropPowerUp(enemy.mesh.position);
@@ -669,7 +763,12 @@ export class Game {
     }
     
     absorbBullet(polarity, position) {
-        this.energy = Math.min(this.energy + 2, 100);
+        // White bullets add to shield energy, black bullets add to weapon energy
+        if (polarity === 'WHITE') {
+            this.whiteEnergy = Math.min(this.whiteEnergy + 2, 100);
+        } else {
+            this.blackEnergy = Math.min(this.blackEnergy + 2, 100);
+        }
         
         // Track bullet absorption
         this.stats.bulletsAbsorbed++;
@@ -685,7 +784,7 @@ export class Game {
         // Play absorption sound
         this.audio.playAbsorb();
         
-        console.log(`Bullet absorbed! Energy: ${this.energy}`);
+        console.log(`Bullet absorbed! White Energy: ${this.whiteEnergy}, Black Energy: ${this.blackEnergy}`);
     }
     
     createExplosion(position, polarity, size = 'medium') {
@@ -713,32 +812,37 @@ export class Game {
         this.audio.playExplosion(soundSize);
     }
     
-    createDebris(position, polarity, size = 'medium') {
-        // Create a gray, semi-transparent debris mesh
+    createDebris(position, polarity, size = 'medium', enemy = null) {
+        // Create a gray, semi-transparent debris sprite using enemy's dead texture
         const debrisSize = size === 'large' ? 25 : size === 'medium' ? 15 : 10;
         
-        // Create irregular debris shape (broken ship pieces)
-        const debrisGeometry = new THREE.CircleGeometry(debrisSize, 6); // Hexagonal broken shape
-        const debrisMaterial = new THREE.MeshBasicMaterial({
-            color: 0x444444, // Dark gray
+        // Create sprite material
+        const debrisMaterial = new THREE.SpriteMaterial({
+            map: null, // Will be set from enemy's dead texture
+            color: 0x888888, // Gray tint for debris
             transparent: true,
-            opacity: 0.5,
-            side: THREE.DoubleSide
+            opacity: 0.5
         });
         
-        const debrisMesh = new THREE.Mesh(debrisGeometry, debrisMaterial);
-        debrisMesh.position.copy(position);
-        debrisMesh.position.z = -1; // Lower level than gameplay (background layer)
+        // If enemy has a dead texture, use it
+        if (enemy && enemy.deadTextureLoaded && enemy.deadTexture) {
+            debrisMaterial.map = enemy.deadTexture;
+        }
+        
+        const debrisSprite = new THREE.Sprite(debrisMaterial);
+        const spriteSize = debrisSize * 2;
+        debrisSprite.scale.set(spriteSize, spriteSize, 1);
+        debrisSprite.position.copy(position);
+        debrisSprite.position.z = -1; // Lower level than gameplay (background layer)
         
         // Random rotation for variety using seeded random
-        debrisMesh.rotation.z = this.random.nextFloat(0, Math.PI * 2);
+        debrisMaterial.rotation = this.random.nextFloat(0, Math.PI * 2);
         
-        this.scene.add(debrisMesh);
+        this.scene.add(debrisSprite);
         
         // Store debris reference - position is already in world space
         this.debris.push({
-            mesh: debrisMesh,
-            geometry: debrisGeometry,
+            mesh: debrisSprite,
             material: debrisMaterial
         });
         
@@ -746,7 +850,9 @@ export class Game {
         if (this.debris.length > 50) {
             const oldDebris = this.debris.shift();
             this.scene.remove(oldDebris.mesh);
-            oldDebris.geometry.dispose();
+            if (oldDebris.material.map) {
+                // Don't dispose shared textures
+            }
             oldDebris.material.dispose();
         }
     }
@@ -757,9 +863,10 @@ export class Game {
             return;
         }
         
-        this.lives--;
+        // Reduce shields by 20 per hit
+        this.whiteEnergy = Math.max(this.whiteEnergy - 20, 0);
         this.chainSystem.breakChain(); // Break chain on hit
-        console.log(`Player hit! Lives: ${this.lives}`);
+        console.log(`Player hit! Shields: ${this.whiteEnergy}%`);
         
         // Activate invincibility
         this.player.activateInvincibility();
@@ -770,7 +877,11 @@ export class Game {
         // Camera shake
         this.cameraShake(5);
         
-        if (this.lives <= 0) {
+        // Damage vignette flash
+        this.showDamageFlash();
+        
+        // Game over if shields depleted
+        if (this.whiteEnergy <= 0) {
             this.gameOver();
         }
     }
@@ -782,8 +893,8 @@ export class Game {
         // Update music intensity based on bullet count
         this.audio.updateMusicIntensity(this.bullets.length, 100);
         
-        // Check for danger mode (low lives or many bullets)
-        if (this.lives <= 1 || this.bullets.length > 80) {
+        // Check for danger mode (low shields or many bullets)
+        if (this.whiteEnergy <= 30 || this.bullets.length > 80) {
             this.audio.setMusicMode('danger');
         } else {
             this.audio.setMusicMode('normal');
@@ -804,6 +915,45 @@ export class Game {
             
             this.powerUps.push(powerUp);
             console.log(`Power-up dropped: ${randomType}`);
+        }
+    }
+    
+    dropCollectibles(position, enemy) {
+        // Calculate number of collectibles based on enemy difficulty
+        let dropCount = 1; // Default for basic enemies
+        
+        // Determine drop count based on enemy type and health
+        if (enemy.isBoss) {
+            dropCount = 15; // Bosses drop many collectibles
+        } else if (enemy.maxHp >= 30) {
+            dropCount = 5; // Tough enemies
+        } else if (enemy.maxHp >= 15) {
+            dropCount = 3; // Medium enemies
+        } else if (enemy.maxHp >= 5) {
+            dropCount = 2; // Stronger basic enemies
+        }
+        
+        console.log(`Dropping ${dropCount} collectibles from enemy with ${enemy.maxHp} HP`);
+        
+        // Spawn collectibles in a scattered pattern
+        for (let i = 0; i < dropCount; i++) {
+            // Random offset from enemy position
+            const angle = this.random.nextFloat(0, Math.PI * 2);
+            const distance = this.random.nextFloat(5, 20);
+            const offsetX = Math.cos(angle) * distance;
+            const offsetY = Math.sin(angle) * distance;
+            
+            const collectible = new Collectible(
+                this,
+                new THREE.Vector3(
+                    position.x + offsetX,
+                    position.y + offsetY,
+                    position.z
+                ),
+                1 // Value of 1 per collectible
+            );
+            
+            this.collectibles.push(collectible);
         }
     }
     
@@ -888,9 +1038,13 @@ export class Game {
     }
     
     removeEnemy(enemy) {
+        console.log(`Removing enemy from game. Enemies before: ${this.enemies.length}`);
         const index = this.enemies.indexOf(enemy);
         if (index > -1) {
             this.enemies.splice(index, 1);
+            console.log(`Enemy removed! Enemies after: ${this.enemies.length}`);
+        } else {
+            console.warn('Enemy not found in enemies array!');
         }
         if (enemy.mesh && enemy.mesh.parent) {
             this.scene.remove(enemy.mesh);
@@ -909,6 +1063,17 @@ export class Game {
     cameraKick(x, y) {
         this.cameraKickX = x;
         this.cameraKickY = y;
+    }
+    
+    showDamageFlash() {
+        // Show red vignette damage flash
+        const vignette = document.getElementById('damage-vignette');
+        if (vignette) {
+            vignette.classList.add('flash');
+            setTimeout(() => {
+                vignette.classList.remove('flash');
+            }, 200); // Flash for 200ms
+        }
     }
     
     hitFreeze(duration = 0.05) {

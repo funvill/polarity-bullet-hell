@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Bullet } from './Bullet.js';
+import playerSpriteUrl from '../assets/player.png';
 
 export class Player {
     constructor(game) {
@@ -16,7 +17,7 @@ export class Player {
         // Invincibility
         this.invincible = false;
         this.invincibilityTimer = 0;
-        this.invincibilityDuration = 3; // 3 seconds
+        this.invincibilityDuration = 1; // 1 second
         this.blinkTimer = 0;
         this.blinkInterval = 0.1; // Blink every 100ms
         
@@ -25,27 +26,48 @@ export class Player {
         this.fireTimer = 0;
         this.fireInterval = 1 / this.fireRate;
         
+        // Load texture
+        this.textureLoader = new THREE.TextureLoader();
+        this.shipTexture = null;
+        this.textureLoaded = false;
+        
+        this.loadTexture();
         this.createMesh();
         this.reset();
     }
     
+    loadTexture() {
+        // Load player sprite texture (will be tinted for black polarity)
+        this.textureLoader.load(playerSpriteUrl, (texture) => {
+            this.shipTexture = texture;
+            this.textureLoaded = true;
+            this.updateSpriteTexture();
+            console.log('Player texture loaded successfully');
+        });
+    }
+    
     createMesh() {
-        // Create ship as a triangle
-        const shape = new THREE.Shape();
-        const size = this.visualRadius;
-        shape.moveTo(0, size);
-        shape.lineTo(-size * 0.6, -size * 0.8);
-        shape.lineTo(size * 0.6, -size * 0.8);
-        shape.lineTo(0, size);
-        
-        const geometry = new THREE.ShapeGeometry(shape);
-        this.material = new THREE.MeshBasicMaterial({ 
-            color: 0xffffff,
-            side: THREE.DoubleSide
+        // Create sprite for player ship using texture
+        const material = new THREE.SpriteMaterial({
+            map: null, // Will be set when texture loads
+            color: 0xffffff, // Start with white, will be tinted based on polarity
+            transparent: true,
+            opacity: 1.0,
+            rotation: 0 // Sprite rotation (will be updated to face mouse)
         });
         
-        this.mesh = new THREE.Mesh(geometry, this.material);
+        this.sprite = new THREE.Sprite(material);
+        // Scale sprite to match visualRadius (diameter = 2 * radius)
+        const spriteSize = this.visualRadius * 2;
+        this.sprite.scale.set(spriteSize, spriteSize, 1);
+        
+        // Create a container for the sprite and other elements
+        this.mesh = new THREE.Object3D();
+        this.mesh.add(this.sprite);
         this.game.scene.add(this.mesh);
+        
+        // Store reference to sprite material for updates
+        this.material = material;
         
         // Create hitbox visualization (debug)
         const hitboxGeometry = new THREE.CircleGeometry(this.hitboxRadius, 16);
@@ -100,7 +122,17 @@ export class Player {
     }
     
     createPolarityShield() {
-        // Polarity shield removed per user request
+        // Create shield ring that shows shield energy level
+        const ringGeometry = new THREE.RingGeometry(this.shieldRadius - 2, this.shieldRadius, 32);
+        this.shieldMaterial = new THREE.MeshBasicMaterial({
+            color: 0x00ffff, // Cyan for white/shields
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.5
+        });
+        this.shieldRing = new THREE.Mesh(ringGeometry, this.shieldMaterial);
+        this.mesh.add(this.shieldRing);
+        
         // Animation state
         this.shieldPulseTime = 0;
     }
@@ -145,8 +177,31 @@ export class Player {
     }
     
     updateShieldAnimation(deltaTime) {
-        // Shield animation removed per user request
-        this.shieldPulseTime += deltaTime * 3;
+        // Update shield opacity based on energy level
+        if (this.shieldRing) {
+            const energyPercent = this.game.whiteEnergy / 100;
+            
+            // Opacity varies with energy (0.3 to 0.8)
+            const baseOpacity = 0.3 + (energyPercent * 0.5);
+            
+            // Add pulse effect
+            this.shieldPulseTime += deltaTime * 2;
+            const pulse = Math.sin(this.shieldPulseTime) * 0.1;
+            
+            this.shieldMaterial.opacity = baseOpacity + pulse;
+            
+            // Color shifts from red (low) to cyan (high)
+            if (energyPercent < 0.3) {
+                // Low energy - red warning
+                this.shieldMaterial.color.setHex(0xff0000);
+            } else if (energyPercent < 0.6) {
+                // Medium energy - yellow
+                this.shieldMaterial.color.setHex(0xffff00);
+            } else {
+                // High energy - cyan
+                this.shieldMaterial.color.setHex(0x00ffff);
+            }
+        }
     }
     
     handleInput(deltaTime) {
@@ -188,6 +243,11 @@ export class Player {
         
         // Set ship rotation (ship points up by default, so no offset needed)
         this.mesh.rotation.z = -angle;
+        
+        // Update sprite rotation to match (sprites need rotation set on material)
+        if (this.material) {
+            this.material.rotation = -angle;
+        }
     }
     
     screenToWorld(screenX, screenY) {
@@ -318,53 +378,53 @@ export class Player {
         animate();
     }
     
-    updateColor() {
-        const color = this.polarity === 'WHITE' ? 0xffffff : 0x000000;
-        this.material.color.setHex(color);
+    updateSpriteTexture() {
+        // Update sprite texture and color based on polarity
+        if (!this.textureLoaded || !this.material) return;
         
-        // Add a colored outline based on polarity
-        if (this.outline) {
-            this.mesh.remove(this.outline);
+        // Set texture
+        this.material.map = this.shipTexture;
+        
+        // Tint color based on polarity
+        if (this.polarity === 'WHITE') {
+            this.material.color.setHex(0xffffff); // White - no tint
+        } else {
+            this.material.color.setHex(0x333333); // Dark gray/black tint
         }
         
-        const outlineColor = this.polarity === 'WHITE' ? 0x00ffff : 0xff8800;
-        const outlineGeometry = new THREE.EdgesGeometry(this.mesh.geometry);
-        const outlineMaterial = new THREE.LineBasicMaterial({ 
-            color: outlineColor,
-            linewidth: 2
-        });
-        this.outline = new THREE.LineSegments(outlineGeometry, outlineMaterial);
-        this.mesh.add(this.outline);
+        this.material.needsUpdate = true;
+    }
+    
+    updateColor() {
+        // Update sprite texture and color tint
+        this.updateSpriteTexture();
     }
     
     useSpecialWeapon() {
-        if (this.game.energy < 100) {
-            console.log('Not enough energy for special weapon');
+        console.log(`Special weapon triggered! Black Energy: ${this.game.blackEnergy}`);
+        
+        if (this.game.blackEnergy < 100) {
+            console.log('Not enough energy for special weapon (need 100)');
             return;
         }
         
         console.log('POLARITY BOMB ACTIVATED!');
         
-        // Play special weapon sound
-        this.game.audio.playSpecialWeapon();
+        // Consume black energy FIRST to prevent multiple activations
+        this.game.blackEnergy = 0;
         
-        // Convert all enemy bullets to player's polarity and absorb them
+        // Play special weapon sound
+        if (this.game.audio) {
+            this.game.audio.playSpecialWeapon();
+        }
+        
+        // Convert all enemy bullets and remove them
         let bulletsConverted = 0;
         for (let i = this.game.bullets.length - 1; i >= 0; i--) {
             const bullet = this.game.bullets[i];
             if (bullet.owner === 'enemy') {
-                // Absorb the bullet for energy (capped at 100)
-                // Create absorption effect
-                const color = this.polarity === 'WHITE' ? 0x00ffff : 0xff8800;
-                const AbsorptionEffect = this.game.effects[0]?.constructor; // Get class reference
-                if (AbsorptionEffect) {
-                    const effect = new (require('../systems/ParticleEffects.js').AbsorptionEffect)(
-                        this.game, 
-                        bullet.mesh.position, 
-                        color
-                    );
-                    this.game.effects.push(effect);
-                }
+                // Create simple particle effect at bullet position
+                this.createAbsorptionParticle(bullet.mesh.position);
                 
                 // Add score bonus
                 this.game.addScore(10);
@@ -378,10 +438,37 @@ export class Player {
         // Create screen-wide pulse effect
         this.createSpecialWeaponEffect();
         
-        // Reset energy
-        this.game.energy = 0;
-        
         console.log(`Polarity Bomb: ${bulletsConverted} bullets converted!`);
+    }
+    
+    createAbsorptionParticle(position) {
+        // Create a small expanding circle at the bullet position
+        const geometry = new THREE.CircleGeometry(5, 16);
+        const material = new THREE.MeshBasicMaterial({
+            color: this.polarity === 'WHITE' ? 0x00ffff : 0xff8800,
+            transparent: true,
+            opacity: 0.8
+        });
+        const particle = new THREE.Mesh(geometry, material);
+        particle.position.copy(position);
+        this.game.scene.add(particle);
+        
+        // Animate and remove
+        let scale = 1;
+        const animate = () => {
+            scale += 0.2;
+            particle.scale.setScalar(scale);
+            material.opacity -= 0.15;
+            
+            if (material.opacity <= 0) {
+                this.game.scene.remove(particle);
+                geometry.dispose();
+                material.dispose();
+            } else {
+                requestAnimationFrame(animate);
+            }
+        };
+        animate();
     }
     
     createSpecialWeaponEffect() {

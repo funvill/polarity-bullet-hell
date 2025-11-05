@@ -41,7 +41,7 @@ The background uses a dynamic tile loading system that loads OpenStreetMap tiles
 
 **Coordinate System:**
 
-- Tiles positioned using **absolute tile coordinates** relative to Vancouver start position (49.2827°N, 123.1207°W, zoom level 11)
+- Tiles positioned using **absolute tile coordinates** relative to Vancouver start position (49.2827°N, 123.1207°W, zoom level 12)
 - Each tile's world position: `(tileX - startTileX) * worldUnitsPerTile`
 - `worldUnitsPerTile` calculated as `playArea.width / tilesWide`
 - Tile container moves with `worldOffset` (same as all game entities)

@@ -10,14 +10,14 @@ export class BackgroundSystem {
         // Vancouver, BC coordinates
         this.startLat = 49.2827;
         this.startLon = -123.1207;
-        this.zoom = 11; // OSM zoom level (11 is zoomed out more, shows larger area)
+        this.zoom = 16 ; // OSM zoom level (higher number = more zoomed in)
         
         // Tile management
         this.tileCache = new Map(); // Cache loaded tiles by "x,y" key
         this.activeTiles = new Map(); // Currently visible tiles
         this.tileSize = 256; // OSM tiles are 256x256
-        this.tilesWide = 9; // Number of tiles to show horizontally (increased for better coverage)
-        this.tilesHigh = 9; // Number of tiles to show vertically (increased for better coverage)
+        this.tilesWide = 15; // Number of tiles to show horizontally (increased to prevent black bars)
+        this.tilesHigh = 15; // Number of tiles to show vertically (increased to prevent black bars)
         
         // Calculate world units per tile
         this.worldUnitsPerTile = this.game.playArea.width / this.tilesWide;
@@ -70,8 +70,6 @@ export class BackgroundSystem {
             return this.tileCache.get(key);
         }
         
-        console.log(`Loading tile: ${tileX}, ${tileY}`);
-        
         // Create canvas for this tile
         const canvas = document.createElement('canvas');
         canvas.width = this.tileSize;
@@ -110,7 +108,6 @@ export class BackgroundSystem {
             ctx.filter = 'none';
             texture.needsUpdate = true;
             tileData.loaded = true;
-            console.log(`✓ Tile loaded: ${tileX}, ${tileY}`);
         };
         
         img.onerror = () => {

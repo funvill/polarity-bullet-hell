@@ -1,6 +1,14 @@
 import * as THREE from 'three';
 import { Bullet } from './Bullet.js';
 
+// Import enemy sprite textures
+import enemySmallUrl from '../assets/enemy_small.png';
+import enemyMediumUrl from '../assets/enemy_medium.png';
+import enemyLargeUrl from '../assets/enemy_large.png';
+import enemySmallDeadUrl from '../assets/enemy_small_dead.png';
+import enemyMediumDeadUrl from '../assets/enemy_medium_dead.png';
+import enemyLargeDeadUrl from '../assets/enemy_large_dead.png';
+
 export class Enemy {
     constructor(game, config) {
         this.game = game;
@@ -28,6 +36,20 @@ export class Enemy {
         // Add slight randomness to fire interval for variety
         this.fireIntervalVariation = 0.9 + this.game.random.next() * 0.2; // 90% to 110%
         
+        // Rotation tracking for smooth rotation towards target
+        this.currentRotation = 0;
+        this.targetRotation = 0;
+        this.rotationSpeed = 3; // Radians per second - adjust for faster/slower rotation
+        
+        // Load texture
+        this.textureLoader = new THREE.TextureLoader();
+        this.texture = null;
+        this.deadTexture = null;
+        this.textureLoaded = false;
+        this.deadTextureLoaded = false;
+        
+        this.loadTexture();
+        this.loadDeadTexture();
         this.createMesh(config.position);
     }
     
@@ -40,27 +62,74 @@ export class Enemy {
         }
     }
     
+    getTextureUrlFromSize(size) {
+        switch (size) {
+            case 'small': return enemySmallUrl;
+            case 'medium': return enemyMediumUrl;
+            case 'large': return enemyLargeUrl;
+            default: return enemyMediumUrl;
+        }
+    }
+    
+    getDeadTextureUrlFromSize(size) {
+        switch (size) {
+            case 'small': return enemySmallDeadUrl;
+            case 'medium': return enemyMediumDeadUrl;
+            case 'large': return enemyLargeDeadUrl;
+            default: return enemyMediumDeadUrl;
+        }
+    }
+    
+    loadTexture() {
+        const textureUrl = this.getTextureUrlFromSize(this.size);
+        this.textureLoader.load(textureUrl, (texture) => {
+            this.texture = texture;
+            this.textureLoaded = true;
+            this.updateSprite();
+        });
+    }
+    
+    loadDeadTexture() {
+        const textureUrl = this.getDeadTextureUrlFromSize(this.size);
+        this.textureLoader.load(textureUrl, (texture) => {
+            this.deadTexture = texture;
+            this.deadTextureLoaded = true;
+        });
+    }
+    
+    updateSprite() {
+        if (!this.textureLoaded || !this.material) return;
+        
+        // Set texture
+        this.material.map = this.texture;
+        
+        // Tint color based on polarity
+        const baseColor = this.polarity === 'WHITE' ? 0xffffff : 0x333333;
+        this.material.color.setHex(baseColor);
+        
+        this.material.needsUpdate = true;
+    }
+    
     createMesh(position) {
-        // Create enemy as a hexagon
-        const geometry = new THREE.CircleGeometry(this.radius, 6);
-        const color = this.polarity === 'WHITE' ? 0xeeeeee : 0x333333;
-        this.material = new THREE.MeshBasicMaterial({ 
-            color: color,
-            side: THREE.DoubleSide
+        // Create enemy sprite
+        const material = new THREE.SpriteMaterial({
+            map: null, // Will be set when texture loads
+            color: this.polarity === 'WHITE' ? 0xffffff : 0x333333,
+            transparent: true,
+            opacity: 1.0
         });
         
-        this.mesh = new THREE.Mesh(geometry, this.material);
+        const sprite = new THREE.Sprite(material);
+        const spriteSize = this.radius * 2;
+        sprite.scale.set(spriteSize, spriteSize, 1);
+        
+        // Create container
+        this.mesh = new THREE.Object3D();
         this.mesh.position.copy(position);
+        this.mesh.add(sprite);
         
-        // Add outline
-        const outlineColor = this.polarity === 'WHITE' ? 0x00ffff : 0xff8800;
-        const outlineGeometry = new THREE.EdgesGeometry(geometry);
-        const outlineMaterial = new THREE.LineBasicMaterial({ 
-            color: outlineColor,
-            linewidth: 2
-        });
-        this.outline = new THREE.LineSegments(outlineGeometry, outlineMaterial);
-        this.mesh.add(this.outline);
+        this.sprite = sprite;
+        this.material = material;
         
         this.game.scene.add(this.mesh);
     }
@@ -71,6 +140,9 @@ export class Enemy {
         // Update position based on movement pattern
         this.updateMovement(deltaTime);
         
+        // Smoothly rotate sprite towards target rotation
+        this.updateRotation(deltaTime);
+        
         // Update firing
         this.fireTimer -= deltaTime;
         if (this.fireTimer <= 0) {
@@ -80,9 +152,38 @@ export class Enemy {
             // Generate new variation for next time
             this.fireIntervalVariation = 0.9 + this.game.random.next() * 0.2;
         }
+    }
+    
+    updateRotation(deltaTime) {
+        // Calculate direction to player for target rotation
+        if (this.game.player && this.game.player.mesh) {
+            const direction = new THREE.Vector3();
+            direction.subVectors(this.game.player.mesh.position, this.mesh.position);
+            direction.normalize();
+            
+            // Calculate target angle
+            this.targetRotation = Math.atan2(direction.x, direction.y);
+        }
         
-        // Don't rotate - keep enemies stationary
-        // this.mesh.rotation.z += deltaTime * 0.5;
+        // Smoothly interpolate current rotation towards target
+        let rotationDiff = this.targetRotation - this.currentRotation;
+        
+        // Normalize angle difference to [-PI, PI]
+        while (rotationDiff > Math.PI) rotationDiff -= Math.PI * 2;
+        while (rotationDiff < -Math.PI) rotationDiff += Math.PI * 2;
+        
+        // Apply rotation with speed limit
+        const maxRotation = this.rotationSpeed * deltaTime;
+        if (Math.abs(rotationDiff) < maxRotation) {
+            this.currentRotation = this.targetRotation;
+        } else {
+            this.currentRotation += Math.sign(rotationDiff) * maxRotation;
+        }
+        
+        // Apply rotation to sprite material
+        if (this.material) {
+            this.material.rotation = -this.currentRotation;
+        }
     }
     
     updateMovement(deltaTime) {
@@ -151,11 +252,17 @@ export class Enemy {
     }
     
     fire() {
-        // Fire a bullet downward toward player
+        // Fire a bullet toward the player
+        // Note: Rotation is handled smoothly in updateRotation()
+        const direction = new THREE.Vector3();
+        direction.subVectors(this.game.player.mesh.position, this.mesh.position);
+        direction.normalize();
+        direction.multiplyScalar(this.bulletSpeed);
+        
         const bullet = new Bullet(this.game, {
             position: this.mesh.position.clone(),
             polarity: this.polarity,
-            velocity: new THREE.Vector3(0, -this.bulletSpeed, 0), // Use enemy's bullet speed
+            velocity: direction,
             owner: 'enemy',
             damage: 1
         });

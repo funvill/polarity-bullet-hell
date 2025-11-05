@@ -2,18 +2,63 @@ import * as THREE from 'three';
 import { Enemy } from './Enemy.js';
 import { Bullet } from './Bullet.js';
 
+// Import special enemy sprite textures
+import enemySniperUrl from '../assets/enemy_sniper.png';
+import enemyTankUrl from '../assets/enemy_tank.png';
+import enemySprayerUrl from '../assets/enemy_sprayer.png';
+import enemyKamikazeUrl from '../assets/enemy_kamikaze.png';
+import enemyDodgerUrl from '../assets/enemy_dodger.png';
+import enemySniperDeadUrl from '../assets/enemy_sniper_dead.png';
+import enemyTankDeadUrl from '../assets/enemy_tank_dead.png';
+import enemySprayerDeadUrl from '../assets/enemy_sprayer_dead.png';
+import enemyKamikazeDeadUrl from '../assets/enemy_kamikaze_dead.png';
+import enemyDodgerDeadUrl from '../assets/enemy_dodger_dead.png';
+
 /**
  * SpecialEnemy - Enhanced enemies with unique behaviors
  */
 export class SpecialEnemy extends Enemy {
     constructor(game, config) {
+        // Store enemy type before calling super
+        config.enemyType = config.enemyType || 'normal';
+        
         super(game, config);
         
         // Initialize visualRadius from parent's radius
         this.visualRadius = this.radius;
         
-        this.enemyType = config.enemyType || 'normal';
+        this.enemyType = config.enemyType;
         this.setupSpecialBehavior();
+        
+        // Reload textures with special enemy sprites for all special types
+        if (this.enemyType !== 'normal') {
+            this.loadTexture();
+            this.loadDeadTexture();
+        }
+    }
+    
+    getTextureUrlFromSize(size) {
+        // Override to use special enemy textures based on type
+        switch (this.enemyType) {
+            case 'sniper': return enemySniperUrl;
+            case 'tank': return enemyTankUrl;
+            case 'sprayer': return enemySprayerUrl;
+            case 'kamikaze': return enemyKamikazeUrl;
+            case 'dodger': return enemyDodgerUrl;
+            default: return super.getTextureUrlFromSize(size);
+        }
+    }
+    
+    getDeadTextureUrlFromSize(size) {
+        // Override to use special enemy dead textures based on type
+        switch (this.enemyType) {
+            case 'sniper': return enemySniperDeadUrl;
+            case 'tank': return enemyTankDeadUrl;
+            case 'sprayer': return enemySprayerDeadUrl;
+            case 'kamikaze': return enemyKamikazeDeadUrl;
+            case 'dodger': return enemyDodgerDeadUrl;
+            default: return super.getDeadTextureUrlFromSize(size);
+        }
     }
     
     setupSpecialBehavior() {
@@ -24,7 +69,7 @@ export class SpecialEnemy extends Enemy {
                 this.fireRate = 2.0; // Slower fire rate
                 this.bulletSpeed *= 1.5;
                 this.value *= 1.5;
-                this.createSniperVisual();
+                // Visual handled by sprite texture
                 break;
                 
             case 'sprayer':
@@ -32,7 +77,7 @@ export class SpecialEnemy extends Enemy {
                 this.fireRate = 1.5;
                 this.bulletSpeed *= 0.8;
                 this.value *= 1.3;
-                this.createSprayerVisual();
+                // Visual handled by sprite texture
                 break;
                 
             case 'kamikaze':
@@ -41,7 +86,7 @@ export class SpecialEnemy extends Enemy {
                 this.fireRate = 0; // Doesn't shoot
                 this.value *= 1.2;
                 this.damage = 2; // Deals double damage on collision
-                this.createKamikazeVisual();
+                // Visual handled by sprite texture
                 break;
                 
             case 'tank':
@@ -50,7 +95,7 @@ export class SpecialEnemy extends Enemy {
                 this.speed *= 0.6;
                 this.visualRadius *= 1.5;
                 this.value *= 2.0;
-                this.createTankVisual();
+                // Visual handled by sprite texture
                 break;
                 
             case 'dodger':
@@ -59,7 +104,7 @@ export class SpecialEnemy extends Enemy {
                 this.value *= 1.4;
                 this.dodgeTimer = 0;
                 this.dodgeCooldown = 0.5;
-                this.createDodgerVisual();
+                // Visual handled by sprite texture
                 break;
         }
     }
@@ -144,6 +189,8 @@ export class SpecialEnemy extends Enemy {
             .subVectors(playerPos, this.mesh.position)
             .normalize();
         
+        // Note: Rotation is handled smoothly in parent's updateRotation()
+        
         // Create 3 bullets with spread
         const spreadAngles = [-0.3, 0, 0.3]; // Radians
         
@@ -184,6 +231,8 @@ export class SpecialEnemy extends Enemy {
         const direction = new THREE.Vector3()
             .subVectors(predictedPos, this.mesh.position)
             .normalize();
+        
+        // Note: Rotation is handled smoothly in parent's updateRotation()
         
         const bullet = new Bullet(this.game, {
             position: this.mesh.position.clone(),

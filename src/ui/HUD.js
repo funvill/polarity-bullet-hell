@@ -10,14 +10,15 @@ export class HUD {
         this.elements = {
             score: document.getElementById('score'),
             chain: document.getElementById('chain'),
-            lives: document.getElementById('lives'),
+            money: document.getElementById('money'),
             polarity: document.getElementById('polarity'),
             fps: document.getElementById('fps'),
             entityCount: document.getElementById('entity-count'),
             gameOver: document.getElementById('game-over'),
             finalScore: document.getElementById('final-score'),
             maxChain: document.getElementById('max-chain'),
-            energyBarFill: document.getElementById('energy-bar-fill'),
+            shieldBarFill: document.getElementById('shield-bar-fill'),
+            weaponBarFill: document.getElementById('weapon-bar-fill'),
             chainDisplay: document.getElementById('chain-display'),
             statEnemiesKilled: document.getElementById('stat-enemies-killed'),
             statAccuracy: document.getElementById('stat-accuracy'),
@@ -47,6 +48,9 @@ export class HUD {
             this.prevScore = this.game.score;
         }
         
+        // Update money
+        this.elements.money.textContent = this.game.money;
+        
         this.elements.chain.textContent = this.game.chain;
         
         // Update chain color based on polarity
@@ -72,21 +76,16 @@ export class HUD {
             this.prevChain = this.game.chain;
         }
         
-        this.elements.lives.textContent = this.game.lives;
+        // Update shield bar (left side, white energy)
+        this.elements.shieldBarFill.style.height = `${this.game.whiteEnergy}%`;
         
-        // Update energy bar (now vertical)
-        this.elements.energyBarFill.style.height = `${this.game.energy}%`;
-        if (this.game.energy >= 100) {
-            this.elements.energyBarFill.classList.add('full');
+        // Update weapon bar (right side, black energy)
+        this.elements.weaponBarFill.style.height = `${this.game.blackEnergy}%`;
+        if (this.game.blackEnergy >= 100) {
+            this.elements.weaponBarFill.classList.add('full');
         } else {
-            this.elements.energyBarFill.classList.remove('full');
+            this.elements.weaponBarFill.classList.remove('full');
         }
-        
-        // Update energy bar color based on polarity (vertical gradient)
-        const energyColor = this.game.player.polarity === 'WHITE' 
-            ? 'linear-gradient(180deg, #00ffff, #0099ff)' 
-            : 'linear-gradient(180deg, #ff8800, #ff4400)';
-        this.elements.energyBarFill.style.background = energyColor;
         
         // Chain display is always visible
         this.elements.chainDisplay.style.display = 'block';
@@ -103,6 +102,22 @@ export class HUD {
         }
         this.elements.polarity.style.padding = '2px 8px';
         this.elements.polarity.style.fontWeight = 'bold';
+        
+        // Update HUD section colors based on polarity
+        const hudSections = document.querySelectorAll('.hud-section, #polarity-display');
+        if (this.game.player.polarity === 'WHITE') {
+            hudSections.forEach(section => {
+                section.style.borderColor = '#00ffff';
+                section.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+                section.style.color = '#00ffff';
+            });
+        } else {
+            hudSections.forEach(section => {
+                section.style.borderColor = '#ff8800';
+                section.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+                section.style.color = '#ff8800';
+            });
+        }
         
         // Update stats
         this.elements.fps.textContent = this.game.currentFPS;

@@ -224,36 +224,73 @@ export class SpawnSystem {
             return this.createSpecialEnemy(config, multipliers);
         }
         
-        // Randomly choose enemy size - higher levels spawn larger enemies
+        // Randomly choose enemy size - only medium and large (no small)
         let size = config.size || 'medium';
         if (!config.size) {
             const rand = this.game.random.next();
             if (this.difficultyLevel >= 3) {
-                if (rand < 0.2) size = 'large';
-                else if (rand < 0.5) size = 'medium';
-                else size = 'small';
+                if (rand < 0.3) size = 'large';
+                else size = 'medium';
             } else if (this.difficultyLevel >= 2) {
-                if (rand < 0.3) size = 'medium';
-                else size = 'small';
+                if (rand < 0.2) size = 'large';
+                else size = 'medium';
             }
+            // Default is medium for all other cases
         }
         
+        // Ensure spawn position is outside the visible play area so enemies enter the screen
+        const left = this.game.playArea.left;
+        const right = this.game.playArea.right;
+        const top = this.game.playArea.top;
+        const bottom = this.game.playArea.bottom;
+        const margin = 60; // how far off-screen to spawn
+
+        let spawnX = config.x;
+        let spawnY = config.y;
+
+        const insideX = spawnX >= (left - margin) && spawnX <= (right + margin);
+        const insideY = spawnY >= (bottom - margin) && spawnY <= (top + margin);
+
+        if (insideX && insideY) {
+            // If a direction is provided, move backwards along it to place spawn off-screen
+            if (config.direction && typeof config.direction.x === 'number') {
+                const dir = config.direction.clone();
+                if (dir.length() === 0) dir.set(0, -1, 0);
+                dir.normalize();
+                const spawnDist = Math.max(this.game.playArea.width, this.game.playArea.height) * 0.6 + margin;
+                spawnX = spawnX - dir.x * spawnDist;
+                spawnY = spawnY - dir.y * spawnDist;
+            } else {
+                // Otherwise pick a random side and place spawn just outside that edge
+                const r = this.game.random.next();
+                if (r < 0.25) { // top
+                    spawnY = top + margin;
+                } else if (r < 0.5) { // bottom
+                    spawnY = bottom - margin;
+                } else if (r < 0.75) { // left
+                    spawnX = left - margin;
+                } else { // right
+                    spawnX = right + margin;
+                }
+            }
+        }
+
         const enemy = new Enemy(this.game, {
             position: { 
-                x: config.x, 
-                y: config.y, 
+                x: spawnX, 
+                y: spawnY, 
                 z: 0 
             },
             polarity: config.polarity,
             size: size,
             hp: multipliers.enemyHP,
-            value: size === 'large' ? 300 : size === 'medium' ? 100 : 50,
-            speed: 50 * multipliers.enemySpeed * (size === 'large' ? 0.8 : size === 'medium' ? 1.0 : 1.2),
+            value: size === 'large' ? 300 : 100, // Only large or medium now
+            speed: 50 * multipliers.enemySpeed * (size === 'large' ? 0.8 : 1.0),
             fireRate: multipliers.fireRate * (size === 'large' ? 0.7 : 1.0),
             movementPattern: config.movementPattern || 'straight',
             direction: config.direction || new THREE.Vector3(0, -1, 0),
             target: config.target,
-            bulletSpeed: 75 * multipliers.bulletSpeed
+            bulletSpeed: size === 'large' ? 120 : size === 'medium' ? 100 : 80  // Fixed speed per size
         });
         
         this.game.enemies.push(enemy);
@@ -280,7 +317,7 @@ export class SpawnSystem {
             movementPattern: config.movementPattern || 'straight',
             direction: config.direction || new THREE.Vector3(0, -1, 0),
             target: config.target,
-            bulletSpeed: 75 * multipliers.bulletSpeed,
+            bulletSpeed: 100,  // Fixed base speed, modified by enemy type
             enemyType: enemyType
         });
         

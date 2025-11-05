@@ -1,9 +1,14 @@
 import * as THREE from 'three';
 import { Bullet } from './Bullet.js';
 
+// Import boss sprite textures (using large enemy as placeholder until boss sprite is created)
+import bossUrl from '../assets/enemy_large.png';
+import bossDeadUrl from '../assets/enemy_large_dead.png';
+
 export class Boss {
     constructor(game, config) {
         this.game = game;
+        this.isBoss = true; // Flag to identify bosses
         this.polarity = config.polarity || 'WHITE';
         this.maxHp = config.hp || 100;
         this.hp = this.maxHp;
@@ -25,20 +30,57 @@ export class Boss {
         this.attackInterval = 2.0; // 2 seconds between attacks
         this.currentAttack = 'spiral';
         
+        // Load texture
+        this.textureLoader = new THREE.TextureLoader();
+        this.texture = null;
+        this.textureLoaded = false;
+        
+        this.loadTexture();
         this.createMesh();
     }
     
+    loadTexture() {
+        // TODO: Replace with actual boss sprite when created
+        this.textureLoader.load(bossUrl, (texture) => {
+            this.texture = texture;
+            this.textureLoaded = true;
+            this.updateSprite();
+            console.log('Boss texture loaded');
+        });
+    }
+    
+    updateSprite() {
+        if (!this.textureLoaded || !this.spriteMaterial) return;
+        
+        // Set texture
+        this.spriteMaterial.map = this.texture;
+        
+        // Tint color based on polarity
+        const baseColor = this.polarity === 'WHITE' ? 0xffffff : 0x333333;
+        this.spriteMaterial.color.setHex(baseColor);
+        
+        this.spriteMaterial.needsUpdate = true;
+    }
+    
     createMesh() {
-        // Create boss as a larger, more complex shape
-        const geometry = new THREE.CircleGeometry(this.radius, 8);
-        const color = this.polarity === 'WHITE' ? 0xeeeeee : 0x333333;
-        this.material = new THREE.MeshBasicMaterial({ 
-            color: color,
-            side: THREE.DoubleSide
+        // Create boss sprite
+        const material = new THREE.SpriteMaterial({
+            map: null, // Will be set when texture loads
+            color: this.polarity === 'WHITE' ? 0xffffff : 0x333333,
+            transparent: true,
+            opacity: 1.0
         });
         
-        this.mesh = new THREE.Mesh(geometry, this.material);
+        const sprite = new THREE.Sprite(material);
+        const spriteSize = this.radius * 2.5; // Larger than normal enemies
+        sprite.scale.set(spriteSize, spriteSize, 1);
+        
+        this.spriteMaterial = material;
+        
+        // Create container for sprite and effects
+        this.mesh = new THREE.Object3D();
         this.mesh.position.copy(this.position);
+        this.mesh.add(sprite);
         
         // Add multiple outline rings for boss look
         const outlineColor = this.polarity === 'WHITE' ? 0x00ffff : 0xff8800;
@@ -347,11 +389,11 @@ export class Boss {
         console.log(`Boss took ${amount} damage. HP: ${this.hp}/${this.maxHp}`);
         
         // Visual feedback - flash
-        const originalColor = this.material.color.getHex();
-        this.material.color.setHex(0xff0000);
+        const originalColor = this.spriteMaterial.color.getHex();
+        this.spriteMaterial.color.setHex(0xff0000);
         setTimeout(() => {
-            if (this.material) {
-                this.material.color.setHex(originalColor);
+            if (this.spriteMaterial) {
+                this.spriteMaterial.color.setHex(originalColor);
             }
         }, 50);
         
@@ -432,9 +474,11 @@ export class Boss {
     }
     
     updateColor() {
-        // Update main body color
-        const color = this.polarity === 'WHITE' ? 0xeeeeee : 0x333333;
-        this.material.color.setHex(color);
+        // Update sprite color based on polarity
+        const color = this.polarity === 'WHITE' ? 0xffffff : 0x333333;
+        if (this.spriteMaterial) {
+            this.spriteMaterial.color.setHex(color);
+        }
         
         // Update outline rings and glow color to match polarity
         const outlineColor = this.polarity === 'WHITE' ? 0x00ffff : 0xff8800;
@@ -492,12 +536,12 @@ export class Boss {
                 0
             ).normalize();
             
-            // Create debris enemy - force small size
+            // Create debris enemy - use medium size
             this.game.spawnSystem.createEnemy({
                 x: this.mesh.position.x,
                 y: this.mesh.position.y,
                 polarity: this.polarity,
-                size: 'small',
+                size: 'medium',
                 movementPattern: 'straight',
                 direction: direction
             });
